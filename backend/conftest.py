@@ -1,5 +1,7 @@
 """Shared pytest fixtures."""
 
+from types import SimpleNamespace
+
 import pytest
 from django.contrib.auth import get_user_model
 
@@ -219,3 +221,80 @@ def demo_org(db, make_user, make_employee, make_team):
         esha=esha,
         sam=sam,
     )
+
+
+@pytest.fixture
+def leave_types(db):
+    """Annual, sick and unpaid leave types for the time-off tests."""
+    from decimal import Decimal
+
+    from apps.timeoff.models import LeaveType
+
+    return SimpleNamespace(
+        annual=LeaveType.objects.create(
+            name="Annual",
+            annual_days=Decimal("20"),
+            carry_over_max=Decimal("5"),
+        ),
+        sick=LeaveType.objects.create(
+            name="Sick",
+            annual_days=Decimal("10"),
+            carry_over_max=Decimal("0"),
+        ),
+        unpaid=LeaveType.objects.create(
+            name="Unpaid",
+            annual_days=Decimal("0"),
+            is_paid=False,
+        ),
+    )
+
+
+@pytest.fixture
+def holidays(db):
+    """One company holiday, on Wednesday 6 May 2026."""
+    from datetime import date
+
+    from apps.timeoff.models import Holiday
+
+    return [Holiday.objects.create(date=date(2026, 5, 6), name="Founders Day")]
+
+
+@pytest.fixture
+def make_balance(db):
+    """Create a leave balance for one employee/type/year."""
+    from decimal import Decimal
+
+    from apps.timeoff.models import LeaveBalance
+
+    def _make(
+        employee,
+        leave_type,
+        *,
+        year: int = 2026,
+        allocated="20",
+        used="0",
+    ):
+        return LeaveBalance.objects.create(
+            employee=employee,
+            leave_type=leave_type,
+            year=year,
+            allocated=Decimal(str(allocated)),
+            used=Decimal(str(used)),
+        )
+
+    return _make
+
+
+@pytest.fixture
+def leave_org(db, demo_org, leave_types, holidays, make_balance):
+    """The demo company with leave types, a holiday and 2026 balances."""
+    from types import SimpleNamespace
+
+    for employee in (demo_org.esha, demo_org.meera, demo_org.sam):
+        for leave_type in (
+            leave_types.annual,
+            leave_types.sick,
+            leave_types.unpaid,
+        ):
+            make_balance(employee, leave_type, allocated=leave_type.annual_days)
+    return SimpleNamespace(org=demo_org, types=leave_types, holidays=holidays)

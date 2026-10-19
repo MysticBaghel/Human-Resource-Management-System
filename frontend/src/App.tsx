@@ -12,6 +12,10 @@ import { EmployeeDetailPage } from "@/pages/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/pages/employees/EmployeeFormPage";
 import { EmployeesPage } from "@/pages/employees/EmployeesPage";
 import { TeamsPage } from "@/pages/teams/TeamsPage";
+import { ApprovalsPage } from "@/pages/timeoff/ApprovalsPage";
+import { EmployeeTimeOffPage } from "@/pages/timeoff/EmployeeTimeOffPage";
+import { MyTimeOffPage } from "@/pages/timeoff/MyTimeOffPage";
+import { TeamCalendarPage } from "@/pages/timeoff/TeamCalendarPage";
 
 export default function App() {
   return (
@@ -38,6 +42,20 @@ export default function App() {
             <Route path="/employees/new" element={<EmployeeFormPage />} />
             <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
             <Route path="/teams" element={<TeamsPage />} />
+          </Route>
+
+          {/* Time off: everyone has their own page and calendar; approvals are
+              for managers, HR and admin. The API scopes what each one sees. */}
+          <Route path="/time-off" element={<MyTimeOffPage />} />
+          <Route path="/team-calendar" element={<TeamCalendarPage />} />
+          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
+            <Route
+              path="/time-off/employees/:id"
+              element={<EmployeeTimeOffPage />}
+            />
+          </Route>
+          <Route element={<RoleRoute allow={["admin", "hr", "manager"]} />}>
+            <Route path="/approvals" element={<ApprovalsPage />} />
           </Route>
         </Route>
       </Route>

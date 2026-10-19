@@ -16,13 +16,13 @@ from django.dispatch import receiver
 
 from apps.employees.models import Employee
 from apps.organization.models import Team
+from apps.timeoff.models import LeaveRequest, LeaveType
 
 from .context import get_current_user
 from .models import AuditLog
 
-# Models whose create/update/delete must be audited. Leave models join in
-# Phase 3.
-TRACKED_MODELS = (Employee, Team)
+# Models whose create/update/delete must be audited.
+TRACKED_MODELS = (Employee, Team, LeaveType, LeaveRequest)
 
 
 def _json_safe(value: Any) -> Any:

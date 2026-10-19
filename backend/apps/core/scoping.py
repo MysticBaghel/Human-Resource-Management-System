@@ -84,6 +84,53 @@ def scope_teams(queryset: QuerySet, user) -> QuerySet:
     return _empty_like(queryset)
 
 
+def scope_leave_requests(queryset: QuerySet, user) -> QuerySet:
+    """Narrow leave requests, independent of their status.
+
+    - employee: their own requests.
+    - manager: their own plus requests from the teams they lead.
+    - hr, admin: everything.
+    """
+    if _is_hr_or_admin(user):
+        return queryset
+    if getattr(user, "role", None) == "manager":
+        return queryset.filter(Q(employee__team__lead__user=user) | Q(employee__user=user))
+    if getattr(user, "role", None) == "employee":
+        return queryset.filter(employee__user=user)
+    return _empty_like(queryset)
+
+
+def scope_leave_balances(queryset: QuerySet, user) -> QuerySet:
+    """Balances are personal: everyone sees their own, HR and admin see all."""
+    if _is_hr_or_admin(user):
+        return queryset
+    if getattr(user, "role", None) in {"employee", "manager"}:
+        return queryset.filter(employee__user=user)
+    return _empty_like(queryset)
+
+
+def scope_calendar_requests(queryset: QuerySet, user) -> QuerySet:
+    """Approved leave visible on the team calendar.
+
+    - employee: their own team's calendar, plus their own leave.
+    - manager: the teams they lead, plus their own leave.
+    - hr, admin: everyone.
+    """
+    if _is_hr_or_admin(user):
+        return queryset
+    if getattr(user, "role", None) == "manager":
+        return queryset.filter(Q(employee__team__lead__user=user) | Q(employee__user=user))
+
+    employee = getattr(user, "employee", None)
+    if employee is None:
+        return _empty_like(queryset)
+    if employee.team_id:
+        return queryset.filter(
+            Q(employee__team_id=employee.team_id) | Q(employee__user=user)
+        )
+    return queryset.filter(employee__user=user)
+
+
 ROLE_SCOPES: dict[str, dict[str, ScopeStrategy]] = {
     "employee": {
         "own": scope_for_own,

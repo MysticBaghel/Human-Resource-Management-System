@@ -1,6 +1,9 @@
 /** Query-string helpers shared by the list hooks. */
 
-export type QueryParams = Record<string, string | number | null | undefined>;
+export type QueryParams = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 export function toQueryString(params: QueryParams): string {
   const search = new URLSearchParams();

@@ -118,12 +118,12 @@ export function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Coming next</CardTitle>
-          <CardDescription>Phase 3 and later</CardDescription>
+          <CardDescription>Phase 4 and later</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
-            <li>Time off: requests, approvals, balances and a team calendar</li>
-            <li>Polish pass with demo data</li>
+            <li>Polish pass: demo data, responsive checks and a deployment-ready README</li>
+            <li>Audit log browsing for HR and admin</li>
           </ul>
         </CardContent>
       </Card>

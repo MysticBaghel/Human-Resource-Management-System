@@ -135,7 +135,7 @@ export function Sidebar({
 
       {!iconsOnly && (
         <p className="px-3 text-xs text-muted-foreground/70">
-          Phase 2 — teams and employees
+          Phase 3 — time off
         </p>
       )}
     </div>

@@ -31,6 +31,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Postgres-specific fields and constraints (DateRangeField,
+    # ExclusionConstraint). Required by the leave-overlap constraint.
+    "django.contrib.postgres",
     # Third party
     "rest_framework",
     "corsheaders",
@@ -39,6 +42,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.organization",
     "apps.employees",
+    "apps.timeoff",
     "apps.audit",
 ]
 

@@ -3,18 +3,20 @@
 A small HR system for one company: employees, teams, time off and an audit log.
 Django + DRF backend, React + Vite frontend, PostgreSQL.
 
-**Current state: Phase 2 (teams, employees, invites, audit) is implemented.**
-Phase 3 (time off) has not been started. What has actually been run is listed
-under "Verified status" at the bottom — read that before trusting any claim.
+**Current state: Phase 3 (time off) is implemented.**
+Phase 4 (polish and demo data) has not been started. What has actually been run is
+listed under "Verified status" at the bottom — read that before trusting any claim.
 
 ## Layout
 
 ```
 backend/
-  config/settings/     base, dev, prod, test
+  config/settings/     base, dev, prod, test, test_postgres
   apps/accounts/       custom User (email login + role), auth endpoints, seed_users
   apps/organization/   Team model and /api/v1/teams/
   apps/employees/      Employee + EmployeeInvite, services, invite flow
+  apps/timeoff/        LeaveType, LeaveBalance, LeaveRequest, Holiday, services,
+                       allocate_balances, /api/v1/leave-*/
   apps/audit/          AuditLog, the signals that write it, request-user middleware
   apps/core/           permissions, role scoping, pagination, error shape, health
   tests/               pytest tests
@@ -22,20 +24,22 @@ frontend/
   src/api/             HTTP client + TanStack Query hooks per resource
   src/auth/            session context, ProtectedRoute, RoleRoute
   src/components/      shadcn/ui style primitives, layout shell, shared states
-  src/pages/           auth, dashboard, employees, teams
+  src/pages/           auth, dashboard, employees, teams, time off
 docs/
   AGENTS.md            standing rules
   PERMISSIONS.md       every endpoint, the roles allowed, how it is scoped
   Handbook.pdf         the build guide
   Phase01.pdf          Phase 1 development and test report
   Phase02.pdf          Phase 2 development and test report
+  Phase03.pdf          Phase 3 development and test report
 ```
 
 ## Requirements
 
 - Python 3.12+ (developed against 3.13)
 - Node.js 20+ (developed against 24)
-- PostgreSQL 16 — optional for now, see "Database" below
+- PostgreSQL 16+ for the leave-overlap constraint (PostgreSQL 18 is what is
+  running here). SQLite works for everything else.
 
 ## Backend
 
@@ -64,6 +68,10 @@ python manage.py runserver 8000
 | employee | employee@hrms.test | Engineering | Meera Manager |
 | employee | employee2@hrms.test | Engineering | Meera Manager |
 
+It also creates three leave types (Annual, Sick, Unpaid), the current year's
+holidays, one balance per active employee and leave type, and one pending annual
+leave request for Esha so the approvals page has something in it.
+
 Everyone shares the password `DemoPass123!`. Only `admin@` is staff **and
 superuser**, so only it can open and actually use the Django admin at `/admin/`.
 The other roles use the React app; they are refused by the admin site.
@@ -75,8 +83,19 @@ cd backend
 pytest
 ```
 
-Tests use in-memory SQLite, so they pass without a database server. They cover
-the role matrix, deactivation, the invite flow and the audit rows.
+Tests use in-memory SQLite by default, so they pass without a database server.
+They cover the role matrix, deactivation, the invite flow, audit rows, working
+days, overlaps, half days, balance movement, approvals, cancellation and the
+calendar.
+
+The two tests that exercise the Postgres exclusion constraint are skipped on
+SQLite. To run the whole suite against Postgres (pytest-django creates and drops
+a separate `test_hrms` database):
+
+```bash
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/hrms \
+  pytest --ds=config.settings.test_postgres
+```
 
 ## Invites
 
@@ -89,15 +108,56 @@ password, and you are signed in as that person.
 Links expire after 7 days, work once, and are refused if the employee has been
 deactivated.
 
+## Time off
+
+- **Working days** are Monday to Friday minus holidays; a half day costs 0.5 and
+  must be a single date. A request cannot span two calendar years.
+- **Overlaps** are refused by the service and by a PostgreSQL exclusion
+  constraint (`btree_gist`, inclusive `daterange`), so two concurrent requests
+  cannot slip through. Cancelled requests do not block their dates.
+- **Approving** deducts the days from the balance; **rejecting** changes nothing;
+  **cancelling** an approved request gives the days back. Balance and request
+  rows are locked in one transaction, so double approval cannot deduct twice.
+- **Who approves:** a manager can approve their own team / direct reports; HR and
+  admin can approve anyone; HR and admin can see every request. The reviewer is
+  recorded, and every state change writes an audit row.
+- **Balances** are read-only through the API. `python manage.py allocate_balances
+  --year 2026` creates them (including capped carry-over). Leave types are
+  editable by HR through `/api/v1/leave-types/`; holidays are managed in the
+  Django admin or by the seed.
+
 ## Database
 
 `DATABASE_URL` decides the database:
 
-- **unset** — local SQLite file at `backend/db.sqlite3`. Handy for a first run.
+- **unset** — local SQLite file at `backend/db.sqlite3`.
 - **set** — that Postgres instance. In `backend/.env`:
   ```
   DATABASE_URL=postgres://hrms:hrms@localhost:5432/hrms
   ```
+
+Check which one Django is actually using:
+
+```bash
+python manage.py shell -c "from django.db import connection; d=connection.settings_dict; print(connection.vendor, d['NAME'])"
+```
+
+If Postgres is already installed locally, create the app role and database once
+(as the `postgres` superuser), then run migrations and seed:
+
+```sql
+CREATE ROLE hrms LOGIN PASSWORD 'hrms';
+CREATE DATABASE hrms OWNER hrms;
+```
+
+```bash
+python manage.py migrate
+python manage.py seed_users
+```
+
+A fresh Postgres database is empty until those two commands run — that is the
+expected "no tables" state. The time-off migration creates the `btree_gist`
+extension (as the database owner) before adding the exclusion constraint.
 
 Start Postgres however you prefer, for example:
 
@@ -105,9 +165,6 @@ Start Postgres however you prefer, for example:
 docker run --name hrms-db -e POSTGRES_USER=hrms -e POSTGRES_PASSWORD=hrms \
   -e POSTGRES_DB=hrms -p 5432:5432 -d postgres:16
 ```
-
-Phase 3's leave-overlap constraint needs Postgres, so those tests will be
-skipped or marked accordingly when only SQLite is available.
 
 ## Frontend
 
@@ -128,10 +185,18 @@ npm run typecheck   # tsc --noEmit
 npm run build       # tsc -b && vite build
 ```
 
-Pages: dashboard, login/forgot/reset, employee list with search/team/status/role
-filters and pagination, employee detail, employee create/edit form, teams with a
-create/edit dialog, and accept-invite. All of them have loading, empty and error
-states and work down to 375px (tables become cards on small screens).
+Pages: dashboard, login/forgot/reset, employee list/detail/form, teams, accept
+invite, **My time off**, **Approvals** and a **Team calendar**.
+
+- Employees and managers get their own balance cards and request list on My time off.
+- HR and admin get a searchable directory of employee names; clicking a person opens
+  that person's page with the leave balance boxes and their requests.
+- HR and admin see every leave request on the Approvals page as a ledger, newest
+  first, with statuses and decisions; managers get their pending queue.
+- The request dialog calls the API for a live working-day and balance preview.
+- The team calendar is a month grid, coloured by leave type, with holidays.
+
+All pages have loading, empty and error states and work down to 375px.
 
 ## API
 
@@ -159,8 +224,19 @@ Auth is Django session + CSRF.
 | GET | `/teams/{id}/` | manager, hr, admin | one team |
 | PATCH / PUT | `/teams/{id}/` | hr, admin | rename, change lead |
 | DELETE | `/teams/{id}/` | hr, admin | delete a team (people keep their record) |
+| GET | `/leave-types/` | session | every leave type |
+| POST / PATCH / DELETE | `/leave-types/{id}/` | hr, admin | manage types (in-use types cannot be deleted) |
+| GET | `/leave-balances/` | session, scoped | balances; `year` and `employee` (HR/admin) filters |
+| GET | `/leave-requests/` | session, scoped | requests; `mine`, `status`, `leave_type`, `employee`, `year` filters |
+| POST | `/leave-requests/` | session | request leave for yourself |
+| POST | `/leave-requests/preview/` | session | days, remaining, sufficient and overlap for the dialog |
+| POST | `/leave-requests/{id}/approve/` | manager (own team), hr, admin | approve and deduct |
+| POST | `/leave-requests/{id}/reject/` | manager (own team), hr, admin | reject; a comment is required |
+| POST | `/leave-requests/{id}/cancel/` | owner, admin | cancel; restores an approved balance |
+| GET | `/leave-calendar/` | session, scoped | approved leave for a month, plus holidays |
 
-`/employees/{id}` has no DELETE: people are deactivated, never deleted. The
+`/employees/{id}` has no DELETE: people are deactivated, never deleted.
+`/leave-requests/{id}` has no DELETE either: requests are cancelled. The
 `auth/probe/*` endpoints exist only so the role matrix is testable.
 
 ## Roles
@@ -183,33 +259,34 @@ Honest inventory of what has and has not been checked.
 **Run, and passing:**
 
 - `python manage.py check` — no issues.
-- `python manage.py migrate` — applied on the dev SQLite database.
-- `python manage.py seed_users` — created 5 users, 5 employees and 2 teams;
-  re-running keeps the counts stable (covered by tests).
-- `pytest` — **151 passed** in ~8s, including the role matrix on employees and
-  teams, 404-vs-403 scoping, the invite/accept flow, deactivate/reactivate,
-  filters, pagination and audit-row assertions.
+- `python manage.py makemigrations --check --dry-run` — no pending changes.
+- `python manage.py migrate` — applied on the dev PostgreSQL database, including
+  the `btree_gist` extension and the exclusion constraint on
+  `timeoff_leaverequest`.
+- `python manage.py seed_users` — 5 users, 5 employees, 2 teams, 3 leave types,
+  4 holidays, 15 balances (5 people × 3 types) and 1 pending request; re-running
+  keeps the counts stable.
+- `pytest` — **258 passed, 2 skipped** on SQLite (the two skips are the
+  Postgres-only exclusion-constraint tests).
+- `pytest --ds=config.settings.test_postgres` — **260 passed** against
+  PostgreSQL 18, including both exclusion-constraint tests.
 - `tsc --noEmit` — clean.
-- `npm run build` — production bundle built (455 kB JS, 139 kB gzip).
-- An end-to-end pass against `runserver` on SQLite with a real HTTP client:
-  login as HR, create an employee, read the invite token, accept it as the new
-  hire, verify the employee sees only their own record, verify their own
-  `job_title` PATCH is 403 while `phone` is 200, verify a manager cannot see
-  another team (404) and cannot list teams they do not lead, verify DELETE is
-  405, deactivate → login fails, reactivate → login works, and confirm the audit
-  rows and their actors. The throwaway users were removed afterwards.
+- `npm run build` — production bundle built (479 kB JS, 144 kB gzip).
+- A live end-to-end run against `runserver` on Postgres: HR sees 3 leave types
+  and 15 balances; Evan previews a 2-day request (and a 0.5 half day), creates
+  it, is refused an overlapping request and refused approving his own; the
+  manager sees it, approves it and the balance drops to 18; the November
+  calendar shows the approved leave; Evan cancels and the balance returns to 20;
+  cancelling twice is refused; the seeded request stays pending; the audit rows
+  are create (Evan), approve (manager), cancel (Evan).
 
 **Not verified:**
 
-- PostgreSQL. Everything above ran on SQLite. The migrations contain nothing
-  Postgres-specific yet, but they have not been applied to a real server.
 - The React pages in a browser. The bundle compiles and the API behind every
-  page was exercised over HTTP, but nobody has clicked through dialogs, filters
-  or the 375px layout.
-- The Django admin forms. Access was checked against the dev database — the
-  seeded `admin@` opens the index, audit log, employees and teams (all 200), and
-  a manager is redirected to the admin login — but editing through the admin was
-  not exercised.
+  page was exercised over HTTP, but nobody has clicked through dialogs, filters,
+  the month grid or the 375px layout.
+- The Django admin forms. Access was checked earlier for the seeded `admin@`;
+  editing through the admin was not exercised.
 - `ruff` — declared in `requirements.txt` but not installed in `backend/.venv`,
   and installing it was blocked by this session's Windows sandbox. No lint run
   was possible.

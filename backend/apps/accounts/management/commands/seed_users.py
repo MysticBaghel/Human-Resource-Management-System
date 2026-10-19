@@ -1,13 +1,18 @@
-"""Create the demo company: five logins, two teams and their employee records."""
+"""Create the demo company: logins, teams, people and a year of time off."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from apps.employees.models import Employee
 from apps.organization.models import Team
+from apps.timeoff import services as timeoff_services
+from apps.timeoff.models import Holiday, LeaveRequest, LeaveType
 
 User = get_user_model()
 
@@ -61,6 +66,21 @@ START_DATES = {
     "employee2@hrms.test": date(2024, 2, 19),
 }
 
+# Leave types created by the seed: name -> defaults.
+DEMO_LEAVE_TYPES = [
+    {"name": "Annual", "annual_days": "20", "carry_over_max": "5"},
+    {"name": "Sick", "annual_days": "10"},
+    {"name": "Unpaid", "annual_days": "10", "is_paid": False},
+]
+
+# Company holidays for the current year: (month, day) -> name.
+DEMO_HOLIDAYS = {
+    (1, 1): "New Year's Day",
+    (5, 1): "Labour Day",
+    (8, 15): "Independence Day",
+    (12, 25): "Christmas Day",
+}
+
 
 class Command(BaseCommand):
     help = "Create the demo users, teams and employees (idempotent)."
@@ -79,11 +99,13 @@ class Command(BaseCommand):
         teams = self._seed_teams()
         employees = self._seed_employees(users, teams)
         self._assign_leads(teams, employees)
+        self._seed_timeoff(employees)
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Demo data ready: {User.objects.count()} users, "
-                f"{Employee.objects.count()} employees, {Team.objects.count()} teams."
+                f"{Employee.objects.count()} employees, {Team.objects.count()} teams, "
+                f"{LeaveType.objects.count()} leave types."
             )
         )
         self.stdout.write("Sign in at http://localhost:5173/login with:")
@@ -170,3 +192,55 @@ class Command(BaseCommand):
             if team.lead_id != employees[lead_email].pk:
                 team.lead = employees[lead_email]
                 team.save(update_fields=["lead"])
+
+    def _seed_timeoff(self, employees: dict[str, Employee]) -> None:
+        """Leave types, current-year holidays, balances and one pending request."""
+        from decimal import Decimal
+
+        year = timezone.localdate().year
+        leave_types: dict[str, LeaveType] = {}
+        for data in DEMO_LEAVE_TYPES:
+            defaults = {
+                "annual_days": Decimal(data["annual_days"]),
+                "carry_over_max": Decimal(data.get("carry_over_max", "0")),
+                "is_paid": data.get("is_paid", True),
+            }
+            leave_type, _ = LeaveType.objects.get_or_create(
+                name=data["name"], defaults=defaults
+            )
+            leave_types[data["name"]] = leave_type
+
+        for (month, day), name in DEMO_HOLIDAYS.items():
+            Holiday.objects.get_or_create(
+                date=date(year, month, day), defaults={"name": name}
+            )
+
+        call_command("allocate_balances", year=year)
+
+        self._seed_demo_request(
+            employees["employee@hrms.test"], leave_types["Annual"], year
+        )
+
+    def _seed_demo_request(self, employee, leave_type, year: int) -> None:
+        """One pending request so the approvals page has something in it."""
+        if LeaveRequest.objects.filter(employee=employee).exists():
+            return
+
+        today = timezone.localdate()
+        days_ahead = (7 - today.weekday()) % 7 or 7
+        start = today + timedelta(days=days_ahead)
+        end = start + timedelta(days=1)
+        if end.year != year:
+            return
+
+        try:
+            timeoff_services.request_leave(
+                employee=employee,
+                leave_type=leave_type,
+                start_date=start,
+                end_date=end,
+            )
+        except ValidationError:
+            # A holiday or a year boundary can make the demo date unsuitable.
+            # The seed still succeeds; the person can request leave in the UI.
+            return

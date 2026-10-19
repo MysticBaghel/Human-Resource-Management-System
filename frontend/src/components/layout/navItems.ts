@@ -10,6 +10,7 @@
 
 import {
   CalendarDays,
+  CalendarRange,
   ClipboardCheck,
   LayoutDashboard,
   ScrollText,
@@ -59,14 +60,21 @@ export const NAV_ITEMS: NavItem[] = [
     path: "/time-off",
     icon: CalendarDays,
     allow: ALL_ROLES,
-    available: false,
+    available: true,
   },
   {
     label: "Approvals",
     path: "/approvals",
     icon: ClipboardCheck,
     allow: ["admin", "hr", "manager"],
-    available: false,
+    available: true,
+  },
+  {
+    label: "Team calendar",
+    path: "/team-calendar",
+    icon: CalendarRange,
+    allow: ALL_ROLES,
+    available: true,
   },
   {
     label: "Audit log",

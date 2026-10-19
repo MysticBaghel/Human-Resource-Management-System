@@ -21,8 +21,9 @@ one, so a record outside your scope returns **404**, not 403. That is deliberate
 a 403 would confirm the record exists.
 
 `apps/core/scoping.py` is the single place that decides this
-(`scope_employees`, `scope_teams`), and `apps/core/permissions.py` holds the
-permission classes.
+(`scope_employees`, `scope_teams`, `scope_leave_requests`,
+`scope_leave_balances`, `scope_calendar_requests`), and
+`apps/core/permissions.py` holds the permission classes.
 
 ## Auth
 
@@ -84,12 +85,64 @@ row, attributed to the signed-in user.
 A team's lead is an employee. Setting a lead is optional; the teams they lead are
 what scopes a manager's view.
 
+## Time off
+
+`/api/v1/leave-types/`, `/leave-balances/`, `/leave-requests/` and
+`/api/v1/leave-calendar/`.
+
+| Role | Leave requests | Balances | Calendar |
+|---|---|---|---|
+| employee | own | own | own team's approved leave, plus their own |
+| manager | own, plus the teams they lead | own | teams they lead, plus their own |
+| hr, admin | all | all | all |
+
+Leave types are readable by everyone (the request dialog needs them) and
+writable by hr/admin. Balances are read-only through the API: only
+`allocate_balances` and the approval/cancellation services move them.
+
+| Method | Path | Allowed | Notes |
+|---|---|---|---|
+| GET | `/leave-types/` | any signed-in user | `search` |
+| POST / PATCH / PUT / DELETE | `/leave-types/{id}/` | hr, admin | deleting a type with requests is a 400 |
+| GET | `/leave-balances/` | any signed-in user, scoped | `year`, `employee` (HR/admin); read-only |
+| GET | `/leave-requests/` | any signed-in user, scoped | `mine`, `status`, `leave_type`, `employee`, `year`; paginated |
+| POST | `/leave-requests/` | any signed-in user with an employee record | always for yourself; an `employee` field is ignored |
+| POST | `/leave-requests/preview/` | same | days, remaining, sufficient and overlap; writes nothing |
+| POST | `/leave-requests/{id}/approve/` | manager (own team/direct report), hr, admin | deducts the balance |
+| POST | `/leave-requests/{id}/reject/` | manager (own team/direct report), hr, admin | a comment is required; no balance change |
+| POST | `/leave-requests/{id}/cancel/` | the owner, or admin | cancels pending or approved; restores an approved balance |
+| GET | `/leave-calendar/` | any signed-in user, scoped | approved leave for `year` + `month`, plus holidays |
+| DELETE | `/leave-requests/{id}/` | nobody | 405; cancel instead |
+
+Rules the service enforces for every caller:
+
+- Working days are Monday to Friday minus holidays; a half day costs 0.5 and must
+  be a single date. Dates with no working days and requests spanning two calendar
+  years are refused.
+- Overlapping non-cancelled requests are refused, and PostgreSQL's exclusion
+  constraint (inclusive `daterange`, `btree_gist`) enforces the same rule at the
+  database level. Cancelled requests do not block their dates.
+- Approve deducts, reject changes nothing, and cancelling an approved request
+  restores the days. The request and balance rows are locked inside one
+  transaction, so approving twice cannot deduct twice.
+- A manager may review a request when the employee reports to them or is in a team
+  they lead. HR and admin may review anyone. A manager outside the team gets a 404
+  from the scoped queryset; an employee is stopped by the permission class.
+- Only the owner (or an admin) may cancel. HR cannot cancel someone else's leave.
+- Every state change writes exactly one audit row with the signed-in actor.
+
+The React app mirrors this: employees and managers see only their own requests on
+"My time off" (`mine=true`, which narrows even a manager's team scope); HR and
+admin get an employee-name directory and open one person's balances with the
+`employee` filter; HR and admin see every request, newest first, on the Approvals
+page, while managers see their pending queue.
+
 ## Audit log
 
-There is no audit API or page yet. Rows are written by signals and are
-browsable, read-only, in the Django admin at `/admin/audit/auditlog/`, which
-only staff/superuser accounts (the seeded `admin@`) can reach. That page is left
-for a later phase.
+There is no audit API or page yet. Rows are written by signals for employees,
+teams, leave types and leave requests, and are browsable, read-only, in the
+Django admin at `/admin/audit/auditlog/`, which only staff/superuser accounts
+(the seeded `admin@`) can reach. That page is left for a later phase.
 
 ## Invariants worth remembering
 

@@ -20,3 +20,8 @@ export function initials(fullName: string): string {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/** 2 -> "2", 0.5 -> "0.5", 4.0 -> "4". */
+export function formatDays(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
