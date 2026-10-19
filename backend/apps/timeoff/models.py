@@ -165,6 +165,12 @@ class LeaveRequest(models.Model):
         related_name="reviewed_leave_requests",
     )
     review_comment = models.TextField(_("review comment"), blank=True)
+    reviewed_at = models.DateTimeField(
+        _("reviewed at"),
+        null=True,
+        blank=True,
+        help_text=_("When the request was approved or rejected."),
+    )
     created_at = models.DateTimeField(_("created at"), auto_now_add=True)
 
     class Meta:

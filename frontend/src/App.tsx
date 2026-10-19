@@ -8,6 +8,7 @@ import { AcceptInvitePage } from "@/pages/auth/AcceptInvitePage";
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
+import { AuditLogPage } from "@/pages/audit/AuditLogPage";
 import { EmployeeDetailPage } from "@/pages/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/pages/employees/EmployeeFormPage";
 import { EmployeesPage } from "@/pages/employees/EmployeesPage";
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/employees/new" element={<EmployeeFormPage />} />
             <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
             <Route path="/teams" element={<TeamsPage />} />
+            <Route path="/audit-log" element={<AuditLogPage />} />
           </Route>
 
           {/* Time off: everyone has their own page and calendar; approvals are

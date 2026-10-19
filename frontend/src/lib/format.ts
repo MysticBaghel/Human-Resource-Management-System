@@ -25,3 +25,16 @@ export function initials(fullName: string): string {
 export function formatDays(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
+
+/** An ISO datetime as "19 Oct 2026, 14:05". */
+export function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

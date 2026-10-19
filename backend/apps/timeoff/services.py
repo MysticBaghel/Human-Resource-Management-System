@@ -13,6 +13,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from apps.accounts.models import User
@@ -127,13 +128,29 @@ def approve_leave(*, request_id: int, reviewer, comment: str = "") -> LeaveReque
                 _insufficient_message(leave.leave_type, remaining, leave.days)
             )
 
+        used_before = balance.used
         balance.used = balance.used + leave.days
         balance.save(update_fields=["used"])
 
         leave.status = LeaveRequest.Status.APPROVED
         leave.reviewer = _reviewer_employee(reviewer)
         leave.review_comment = (comment or "").strip()
-        leave.save(update_fields=["status", "reviewer", "review_comment"])
+        leave.reviewed_at = timezone.now()
+        # Fold the balance movement into the same audit row as the decision.
+        leave._audit_extra_changes = {
+            "balance_used": {
+                "before": str(used_before),
+                "after": str(balance.used),
+            }
+        }
+        leave.save(
+            update_fields=[
+                "status",
+                "reviewer",
+                "review_comment",
+                "reviewed_at",
+            ]
+        )
         return leave
 
 
@@ -153,7 +170,15 @@ def reject_leave(*, request_id: int, reviewer, comment: str) -> LeaveRequest:
         leave.status = LeaveRequest.Status.REJECTED
         leave.reviewer = _reviewer_employee(reviewer)
         leave.review_comment = comment.strip()
-        leave.save(update_fields=["status", "reviewer", "review_comment"])
+        leave.reviewed_at = timezone.now()
+        leave.save(
+            update_fields=[
+                "status",
+                "reviewer",
+                "review_comment",
+                "reviewed_at",
+            ]
+        )
         return leave
 
 
@@ -173,8 +198,15 @@ def cancel_leave(*, request_id: int, actor) -> LeaveRequest:
             balance = _balance_for(
                 leave.employee, leave.leave_type, leave.start_date.year, lock=True
             )
+            used_before = balance.used
             balance.used = balance.used - leave.days
             balance.save(update_fields=["used"])
+            leave._audit_extra_changes = {
+                "balance_used": {
+                    "before": str(used_before),
+                    "after": str(balance.used),
+                }
+            }
 
         leave.status = LeaveRequest.Status.CANCELLED
         leave.save(update_fields=["status"])

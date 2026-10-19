@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.organization",
     "apps.employees",
     "apps.timeoff",
+    "apps.dashboard",
     "apps.audit",
 ]
 

@@ -54,6 +54,7 @@ export type LeaveRequest = {
   reviewer: number | null;
   reviewer_name: string | null;
   review_comment: string;
+  reviewed_at: string | null;
   created_at: string;
 };
 

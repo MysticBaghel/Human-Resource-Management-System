@@ -1,7 +1,26 @@
-/** Landing page after login. Confirms the session and shows the user's role. */
+/** Role-aware dashboard, backed by one scoped /api/v1/dashboard/ call. */
 
+import {
+  AlarmClock,
+  CalendarDays,
+  CalendarRange,
+  ClipboardCheck,
+  Users,
+  UsersRound,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
+
+import { useDashboard } from "@/api/dashboard";
+import { ROLE_LABELS, useHealth } from "@/api/queries";
 import { useAuth } from "@/auth/AuthContext";
-import { ROLE_LABELS, useHealth, type Role } from "@/api/queries";
+import { EmptyState, ErrorState } from "@/components/common/states";
+import { ActivityList } from "@/components/dashboard/ActivityList";
+import { LeaveList } from "@/components/dashboard/LeaveList";
+import { MetricCard } from "@/components/dashboard/MetricCard";
+import { BalanceCards } from "@/components/leave/BalanceCards";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,124 +28,367 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const ROLE_SCOPE: Record<Role, string> = {
-  admin: "Full access, including roles and settings.",
-  hr: "All employees and teams, leave types, and every leave request.",
-  manager: "Your own team: view members, approve or reject their leave.",
-  employee: "Your own profile and your own time off.",
-};
+function PageSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-6" aria-busy="true" aria-live="polite">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-48" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-28 w-full" />
+        ))}
+      </div>
+      <Skeleton className="h-64 w-full" />
+      <span className="sr-only">Loading your dashboard…</span>
+    </div>
+  );
+}
 
-function HealthCard() {
-  const { data, isError, isLoading, refetch, isFetching, error } = useHealth();
+function SystemStatus() {
+  const { data, isLoading, isError, refetch } = useHealth();
+
+  if (isLoading) {
+    return <Skeleton className="h-6 w-40" />;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-destructive">
+          API unreachable
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void refetch()}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
+      <span className="font-medium">{data?.status ?? "unknown"}</span>
+      <span className="text-xs text-muted-foreground">
+        GET /api/v1/health/
+      </span>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">API status</CardTitle>
-        <CardDescription>GET /api/v1/health/</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div className="space-y-1">
+          <CardTitle className="text-base">{title}</CardTitle>
+          {description ? <CardDescription>{description}</CardDescription> : null}
+        </div>
+        {action}
       </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="space-y-2" aria-busy="true" aria-live="polite">
-            <div className="h-6 w-20 animate-pulse rounded bg-muted" />
-            <div className="h-3 w-40 animate-pulse rounded bg-muted" />
-            <span className="sr-only">Checking API status…</span>
-          </div>
-        ) : isError ? (
-          <div className="space-y-3" role="alert">
-            <p className="text-sm font-medium text-destructive">
-              Could not reach the API
-            </p>
-            <p className="break-words text-xs text-muted-foreground">
-              {error instanceof Error ? error.message : "Unknown error."}
-            </p>
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              disabled={isFetching}
-              className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-60"
-            >
-              {isFetching ? "Retrying…" : "Retry"}
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">
-              {data?.status ?? "unknown"}
-            </span>
-            <span className="text-xs text-muted-foreground">Django is responding</span>
-          </div>
-        )}
-      </CardContent>
+      <CardContent>{children}</CardContent>
     </Card>
   );
 }
 
 export function DashboardPage() {
   const { user } = useAuth();
+  const { data, isLoading, isError, error, refetch } = useDashboard();
 
   if (user === null) return null;
+  if (isLoading) return <PageSkeleton />;
 
+  if (isError || data === undefined) {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <ErrorState
+          title="Could not load your dashboard"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
+
+  const metrics = data.metrics;
+  const number = (key: string) => metrics[key] ?? 0;
   const name = user.email.split("@")[0];
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome, {name}</h1>
-        <p className="text-sm text-muted-foreground">
-          You are signed in as{" "}
-          <span className="font-medium text-foreground">{ROLE_LABELS[user.role]}</span>.
-        </p>
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Welcome, {name}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {ROLE_LABELS[user.role]} dashboard · live company data
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline">{ROLE_LABELS[user.role]}</Badge>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/time-off">Time off</Link>
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Signed in</CardTitle>
-            <CardDescription>{user.email}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+      {user.role === "admin" ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard
+              label="Active employees"
+              value={number("active_employees")}
+              href="/employees"
+              icon={Users}
+            />
+            <MetricCard
+              label="Teams"
+              value={number("teams")}
+              href="/teams"
+              icon={UsersRound}
+            />
+            <MetricCard
+              label="Pending leave"
+              value={number("pending_leave_requests")}
+              href="/approvals"
+              icon={ClipboardCheck}
+            />
+            <MetricCard
+              label="On leave today"
+              value={number("on_leave_today")}
+              href="/team-calendar"
+              icon={CalendarDays}
+            />
+          </div>
+
+          <SectionCard
+            title="Recent company activity"
+            description="Latest audited changes across the company."
+            action={
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/audit-log">Audit log</Link>
+              </Button>
+            }
+          >
+            <ActivityList
+              entries={data.recent_activity ?? []}
+              empty="No company activity yet."
+            />
+          </SectionCard>
+        </>
+      ) : null}
+
+      {user.role === "hr" ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <MetricCard
+              label="Active employees"
+              value={number("active_employees")}
+              href="/employees"
+              icon={Users}
+            />
+            <MetricCard
+              label="Teams"
+              value={number("teams")}
+              href="/teams"
+              icon={UsersRound}
+            />
+            <MetricCard
+              label="Pending leave"
+              value={number("pending_leave_requests")}
+              href="/approvals"
+              icon={ClipboardCheck}
+            />
+            <MetricCard
+              label="Needs HR review"
+              value={number("pending_without_manager")}
+              href="/approvals"
+              hint="no manager assigned"
+              icon={AlarmClock}
+            />
+            <MetricCard
+              label="On leave today"
+              value={number("on_leave_today")}
+              href="/team-calendar"
+              icon={CalendarDays}
+            />
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SectionCard
+              title="Recent employee changes"
+              description="New and updated people records."
+            >
+              <ActivityList
+                entries={data.recent_employee_changes ?? []}
+                empty="No employee changes yet."
+              />
+            </SectionCard>
+            <SectionCard
+              title="Recent activity"
+              description="Latest audited changes."
+              action={
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/audit-log">Audit log</Link>
+                </Button>
+              }
+            >
+              <ActivityList
+                entries={data.recent_activity ?? []}
+                empty="No activity yet."
+              />
+            </SectionCard>
+          </div>
+        </>
+      ) : null}
+
+      {user.role === "manager" ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard
+              label="Team members"
+              value={number("team_employees")}
+              href="/employees"
+              icon={Users}
+            />
+            <MetricCard
+              label="Pending approvals"
+              value={number("pending_leave_requests")}
+              href="/approvals"
+              icon={ClipboardCheck}
+            />
+            <MetricCard
+              label="Needs attention"
+              value={number("pending_attention")}
+              href="/approvals"
+              hint="pending over 2 days"
+              icon={AlarmClock}
+            />
+            <MetricCard
+              label="On leave today"
+              value={number("on_leave_today")}
+              href="/team-calendar"
+              icon={CalendarDays}
+            />
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SectionCard
+              title="Pending approvals"
+              description="Your team's requests waiting for a decision."
+              action={
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/approvals">Open approvals</Link>
+                </Button>
+              }
+            >
+              <LeaveList
+                requests={data.pending_requests ?? []}
+                empty="Nothing waiting for your decision."
+              />
+            </SectionCard>
+            <SectionCard
+              title="Upcoming team leave"
+              description="Approved leave starting in the future."
+            >
+              <LeaveList
+                requests={data.upcoming_leave ?? []}
+                empty="No upcoming approved leave."
+              />
+            </SectionCard>
+          </div>
+        </>
+      ) : null}
+
+      {user.role === "employee" ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard
+              label="Pending requests"
+              value={number("pending_leave_requests")}
+              href="/time-off"
+              icon={ClipboardCheck}
+            />
+            <MetricCard
+              label="Upcoming leave"
+              value={number("upcoming_leave_count")}
+              href="/time-off"
+              icon={CalendarRange}
+            />
+          </div>
+
+          <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Role</span>
-              <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium">
-                {ROLE_LABELS[user.role]}
-              </span>
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Leave balances
+              </h2>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/time-off">My time off</Link>
+              </Button>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Status</span>
-              <span className="font-medium">{user.is_active ? "Active" : "Inactive"}</span>
-            </div>
-          </CardContent>
-        </Card>
+            {(data.balances ?? []).length > 0 ? (
+              <BalanceCards balances={data.balances ?? []} />
+            ) : (
+              <EmptyState
+                title="No leave allocated"
+                description="Ask HR to allocate balances for this year."
+              />
+            )}
+          </section>
 
-        <HealthCard />
-      </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SectionCard title="Pending requests">
+              <LeaveList
+                requests={data.pending_requests ?? []}
+                empty="No pending requests."
+                showEmployee={false}
+              />
+            </SectionCard>
+            <SectionCard title="Upcoming leave">
+              <LeaveList
+                requests={data.upcoming_leave ?? []}
+                empty="No upcoming approved leave."
+                showEmployee={false}
+              />
+            </SectionCard>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">What this role can do</CardTitle>
-          <CardDescription>
-            The API enforces this. The sidebar only reflects it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          {ROLE_SCOPE[user.role]}
-        </CardContent>
-      </Card>
+          <SectionCard title="Recent decisions">
+            <LeaveList
+              requests={data.recent_decisions ?? []}
+              empty="No decisions yet."
+              showEmployee={false}
+            />
+          </SectionCard>
+        </>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Coming next</CardTitle>
-          <CardDescription>Phase 4 and later</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
-            <li>Polish pass: demo data, responsive checks and a deployment-ready README</li>
-            <li>Audit log browsing for HR and admin</li>
-          </ul>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="System status"
+        description="API health is kept separate from your business metrics."
+      >
+        <SystemStatus />
+      </SectionCard>
     </div>
   );
 }

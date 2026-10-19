@@ -12,7 +12,8 @@ from rest_framework.exceptions import ValidationError
 from apps.employees.models import Employee
 from apps.organization.models import Team
 from apps.timeoff import services as timeoff_services
-from apps.timeoff.models import Holiday, LeaveRequest, LeaveType
+from apps.timeoff.demo import ensure_holidays, ensure_leave_types
+from apps.timeoff.models import LeaveRequest, LeaveType
 
 User = get_user_model()
 
@@ -64,21 +65,6 @@ START_DATES = {
     "manager@hrms.test": date(2022, 1, 10),
     "employee@hrms.test": date(2023, 9, 4),
     "employee2@hrms.test": date(2024, 2, 19),
-}
-
-# Leave types created by the seed: name -> defaults.
-DEMO_LEAVE_TYPES = [
-    {"name": "Annual", "annual_days": "20", "carry_over_max": "5"},
-    {"name": "Sick", "annual_days": "10"},
-    {"name": "Unpaid", "annual_days": "10", "is_paid": False},
-]
-
-# Company holidays for the current year: (month, day) -> name.
-DEMO_HOLIDAYS = {
-    (1, 1): "New Year's Day",
-    (5, 1): "Labour Day",
-    (8, 15): "Independence Day",
-    (12, 25): "Christmas Day",
 }
 
 
@@ -195,25 +181,9 @@ class Command(BaseCommand):
 
     def _seed_timeoff(self, employees: dict[str, Employee]) -> None:
         """Leave types, current-year holidays, balances and one pending request."""
-        from decimal import Decimal
-
         year = timezone.localdate().year
-        leave_types: dict[str, LeaveType] = {}
-        for data in DEMO_LEAVE_TYPES:
-            defaults = {
-                "annual_days": Decimal(data["annual_days"]),
-                "carry_over_max": Decimal(data.get("carry_over_max", "0")),
-                "is_paid": data.get("is_paid", True),
-            }
-            leave_type, _ = LeaveType.objects.get_or_create(
-                name=data["name"], defaults=defaults
-            )
-            leave_types[data["name"]] = leave_type
-
-        for (month, day), name in DEMO_HOLIDAYS.items():
-            Holiday.objects.get_or_create(
-                date=date(year, month, day), defaults={"name": name}
-            )
+        leave_types = ensure_leave_types()
+        ensure_holidays(year)
 
         call_command("allocate_balances", year=year)
 

@@ -81,7 +81,7 @@ export const NAV_ITEMS: NavItem[] = [
     path: "/audit-log",
     icon: ScrollText,
     allow: ["admin", "hr"],
-    available: false,
+    available: true,
   },
 ];
 

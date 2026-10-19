@@ -41,7 +41,10 @@ class AuditLog(models.Model):
         ordering = ["-created_at", "-id"]
         verbose_name = _("audit log")
         verbose_name_plural = _("audit log")
-        indexes = [models.Index(fields=["model", "object_id"])]
+        indexes = [
+            models.Index(fields=["model", "object_id"]),
+            models.Index(fields=["-created_at"], name="audit_created_at_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.action} {self.model} #{self.object_id}"

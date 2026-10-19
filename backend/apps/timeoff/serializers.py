@@ -94,6 +94,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             "reviewer",
             "reviewer_name",
             "review_comment",
+            "reviewed_at",
             "created_at",
         ]
         read_only_fields = fields

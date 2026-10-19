@@ -18,7 +18,7 @@ from apps.employees.models import Employee
 from apps.organization.models import Team
 from apps.timeoff.models import LeaveRequest, LeaveType
 
-from .context import get_current_user
+from .context import audit_suppressed, get_current_user
 from .models import AuditLog
 
 # Models whose create/update/delete must be audited.
@@ -74,7 +74,7 @@ def _capture_stored_values(sender, instance, **kwargs) -> None:
 
 @receiver(post_save)
 def _record_save(sender, instance, created: bool, raw: bool = False, **kwargs) -> None:
-    if sender not in TRACKED_MODELS or raw:
+    if sender not in TRACKED_MODELS or raw or audit_suppressed():
         return
 
     after = snapshot(instance)
@@ -108,7 +108,7 @@ def _record_save(sender, instance, created: bool, raw: bool = False, **kwargs) -
 
 @receiver(post_delete)
 def _record_delete(sender, instance, **kwargs) -> None:
-    if sender not in TRACKED_MODELS:
+    if sender not in TRACKED_MODELS or audit_suppressed():
         return
 
     AuditLog.objects.create(

@@ -3,9 +3,10 @@
 A small HR system for one company: employees, teams, time off and an audit log.
 Django + DRF backend, React + Vite frontend, PostgreSQL.
 
-**Current state: Phase 3 (time off) is implemented.**
-Phase 4 (polish and demo data) has not been started. What has actually been run is
-listed under "Verified status" at the bottom — read that before trusting any claim.
+**Current state: Phase 4 (role-aware dashboard, audit log browsing, demo data) is
+implemented.** Post-MVP features have not been started. What has actually been run
+is listed under "Verified status" at the bottom — read that before trusting any
+claim.
 
 ## Layout
 
@@ -17,14 +18,15 @@ backend/
   apps/employees/      Employee + EmployeeInvite, services, invite flow
   apps/timeoff/        LeaveType, LeaveBalance, LeaveRequest, Holiday, services,
                        allocate_balances, /api/v1/leave-*/
-  apps/audit/          AuditLog, the signals that write it, request-user middleware
+  apps/dashboard/      role-scoped /api/v1/dashboard/ service
+  apps/audit/          AuditLog, signals, middleware, /api/v1/audit-logs/
   apps/core/           permissions, role scoping, pagination, error shape, health
   tests/               pytest tests
 frontend/
   src/api/             HTTP client + TanStack Query hooks per resource
   src/auth/            session context, ProtectedRoute, RoleRoute
   src/components/      shadcn/ui style primitives, layout shell, shared states
-  src/pages/           auth, dashboard, employees, teams, time off
+  src/pages/           auth, dashboard, employees, teams, time off, audit
 docs/
   AGENTS.md            standing rules
   PERMISSIONS.md       every endpoint, the roles allowed, how it is scoped
@@ -32,6 +34,7 @@ docs/
   Phase01.pdf          Phase 1 development and test report
   Phase02.pdf          Phase 2 development and test report
   Phase03.pdf          Phase 3 development and test report
+  Phase04.pdf          Phase 4 development and test report
 ```
 
 ## Requirements
@@ -55,6 +58,7 @@ pip install -r requirements.txt
 cp .env.example .env       # then edit DJANGO_SECRET_KEY
 python manage.py migrate
 python manage.py seed_users
+python manage.py seed_demo   # optional: a larger, idempotent demo company
 python manage.py runserver 8000
 ```
 
@@ -72,6 +76,14 @@ It also creates three leave types (Annual, Sick, Unpaid), the current year's
 holidays, one balance per active employee and leave type, and one pending annual
 leave request for Esha so the approvals page has something in it.
 
+`seed_demo` is a development-only, idempotent command that adds a larger company on
+top of whatever is already there: 3 teams (Product, Sales, Support), 20 demo
+employees with team managers, balances for the current and next year, and a mix of
+pending, approved and rejected leave requests. It never deletes data and suppresses
+audit writes, so generated demo data is not presented as user activity. Its
+accounts are `demo01@hrms.test` … `demo20@hrms.test` (team leads `demo01`,
+`demo09`, `demo15`), same password.
+
 Everyone shares the password `DemoPass123!`. Only `admin@` is staff **and
 superuser**, so only it can open and actually use the Django admin at `/admin/`.
 The other roles use the React app; they are refused by the admin site.
@@ -85,8 +97,9 @@ pytest
 
 Tests use in-memory SQLite by default, so they pass without a database server.
 They cover the role matrix, deactivation, the invite flow, audit rows, working
-days, overlaps, half days, balance movement, approvals, cancellation and the
-calendar.
+days, overlaps, half days, balance movement, approvals, cancellation, the
+calendar, the dashboard payload for every role, audit API authorization and
+filters, audit exactly-once and transaction behaviour, and the demo seed.
 
 The two tests that exercise the Postgres exclusion constraint are skipped on
 SQLite. To run the whole suite against Postgres (pytest-django creates and drops
@@ -185,16 +198,22 @@ npm run typecheck   # tsc --noEmit
 npm run build       # tsc -b && vite build
 ```
 
-Pages: dashboard, login/forgot/reset, employee list/detail/form, teams, accept
-invite, **My time off**, **Approvals** and a **Team calendar**.
+Pages: role-aware dashboard, login/forgot/reset, employee list/detail/form, teams,
+accept invite, **My time off**, **Approvals**, **Team calendar**, and the **Audit
+log** for HR and admin.
 
-- Employees and managers get their own balance cards and request list on My time off.
-- HR and admin get a searchable directory of employee names; clicking a person opens
-  that person's page with the leave balance boxes and their requests.
+- The dashboard is computed from the database per role: admin and HR get company
+  counts and activity, managers get their team's pending approvals and upcoming
+  leave, employees get their balances, pending requests and recent decisions.
+- My time off: employees and managers see only their own balances and requests.
+  HR and admin get a searchable employee-name directory; clicking a person opens
+  that person's balance boxes and requests.
 - HR and admin see every leave request on the Approvals page as a ledger, newest
   first, with statuses and decisions; managers get their pending queue.
 - The request dialog calls the API for a live working-day and balance preview.
 - The team calendar is a month grid, coloured by leave type, with holidays.
+- The audit log page has filters for action, resource, actor and date range,
+  search, pagination, and a detail dialog with before/after changes.
 
 All pages have loading, empty and error states and work down to 375px.
 
@@ -213,6 +232,7 @@ Auth is Django session + CSRF.
 | POST | `/auth/password-reset/` | public | emails a reset link |
 | POST | `/auth/password-reset/confirm/` | public | sets a new password |
 | POST | `/auth/accept-invite/` | public | sets the first password from an invite |
+| GET | `/dashboard/` | session | role-scoped dashboard metrics and lists |
 | GET | `/employees/` | session, scoped | list/search/filter employees |
 | POST | `/employees/` | hr, admin | create a person + login + invite |
 | GET | `/employees/{id}/` | session, scoped | one employee |
@@ -234,6 +254,13 @@ Auth is Django session + CSRF.
 | POST | `/leave-requests/{id}/reject/` | manager (own team), hr, admin | reject; a comment is required |
 | POST | `/leave-requests/{id}/cancel/` | owner, admin | cancel; restores an approved balance |
 | GET | `/leave-calendar/` | session, scoped | approved leave for a month, plus holidays |
+| GET | `/audit-logs/` | hr, admin | audit feed; `action`, `model`, `actor`, `date_from`, `date_to`, `search`, `page` |
+| GET | `/audit-logs/{id}/` | hr, admin | one audit event with its changes |
+| GET | `/audit-logs/actors/` | hr, admin | distinct actors for the filter |
+
+The audit endpoints are read-only: POST, PATCH and DELETE return 405, and
+managers/employees get 403. Dashboard data is one role-scoped payload; the
+employee response contains no company-wide fields.
 
 `/employees/{id}` has no DELETE: people are deactivated, never deleted.
 `/leave-requests/{id}` has no DELETE either: requests are cancelled. The
@@ -250,7 +277,9 @@ Auth is Django session + CSRF.
 
 Permissions are enforced by DRF permission classes on every view, and querysets
 are narrowed by `apps/core/scoping.py`. Route guards in React are a UX layer
-only — the API is the real gate.
+only — the API is the real gate. The dashboard payload is assembled per role in
+`apps/dashboard/services.py`; the audit feed is HR/admin only in
+`apps/audit/views.py`.
 
 ## Verified status
 
@@ -262,20 +291,31 @@ Honest inventory of what has and has not been checked.
 - `python manage.py makemigrations --check --dry-run` — no pending changes.
 - `python manage.py migrate` — applied on the dev PostgreSQL database, including
   the `btree_gist` extension and the exclusion constraint on
-  `timeoff_leaverequest`.
+  `timeoff_leaverequest`, `reviewed_at` on leave requests, and the audit
+  created-at index.
 - `python manage.py seed_users` — 5 users, 5 employees, 2 teams, 3 leave types,
   4 holidays, 15 balances (5 people × 3 types) and 1 pending request; re-running
   keeps the counts stable.
-- `pytest` — **258 passed, 2 skipped** on SQLite (the two skips are the
+- `python manage.py seed_demo` — 3 teams, 20 demo users/employees and 10 requests
+  (3 pending, 4 approved, 3 rejected); audit writes suppressed; re-running keeps
+  the counts stable and deletes nothing.
+- `pytest` — **299 passed, 2 skipped** on SQLite (the two skips are the
   Postgres-only exclusion-constraint tests).
-- `pytest --ds=config.settings.test_postgres` — **260 passed** against
+- `pytest --ds=config.settings.test_postgres` — **301 passed** against
   PostgreSQL 18, including both exclusion-constraint tests.
 - `tsc --noEmit` — clean.
-- `npm run build` — production bundle built (479 kB JS, 144 kB gzip).
-- A live end-to-end run against `runserver` on Postgres: HR sees 3 leave types
-  and 15 balances; Evan previews a 2-day request (and a 0.5 half day), creates
-  it, is refused an overlapping request and refused approving his own; the
-  manager sees it, approves it and the balance drops to 18; the November
+- `npm run build` — production bundle built (502 kB JS, 148 kB gzip; Vite warns
+  that the single chunk is just over 500 kB).
+- Live checks against the dev PostgreSQL database through Django's test client:
+  HR dashboard returned 25 active employees, 5 teams, 3 pending requests and 2
+  people on leave today; the audit feed returned 23 events and the
+  `action=create&model=employees.employee` filter returned 5; the manager
+  dashboard returned 3 team members and the employee dashboard returned their own
+  metrics; a manager request to the audit feed returned 403.
+- A live end-to-end run against `runserver` on Postgres (Phase 3) still holds: HR
+  sees 3 leave types and 15 balances; Evan previews a 2-day request (and a 0.5 half
+  day), creates it, is refused an overlapping request and refused approving his
+  own; the manager sees it, approves it and the balance drops to 18; the November
   calendar shows the approved leave; Evan cancels and the balance returns to 20;
   cancelling twice is refused; the seeded request stays pending; the audit rows
   are create (Evan), approve (manager), cancel (Evan).
@@ -283,8 +323,8 @@ Honest inventory of what has and has not been checked.
 **Not verified:**
 
 - The React pages in a browser. The bundle compiles and the API behind every
-  page was exercised over HTTP, but nobody has clicked through dialogs, filters,
-  the month grid or the 375px layout.
+  page was exercised over HTTP, but nobody has clicked through the dashboard
+  cards, audit filters, detail dialog or the 375px layout.
 - The Django admin forms. Access was checked earlier for the seeded `admin@`;
   editing through the admin was not exercised.
 - `ruff` — declared in `requirements.txt` but not installed in `backend/.venv`,
@@ -292,6 +332,17 @@ Honest inventory of what has and has not been checked.
   was possible.
 - `npm run lint` / `npm run test` — those scripts do not exist yet; ESLint and
   Vitest were not set up in Phase 1. Typecheck and build are the checks used.
+- `docs/HANDBOOK.md` is still missing from the repository (only the PDF exists);
+  the Phase 4 work was guided by the PDF, `AGENTS.md` and `docs/PERMISSIONS.md`.
 
 Anything claimed to work has one of the checks above behind it; the gaps are
 listed rather than glossed over.
+
+## Data notes
+
+- `LeaveRequest.reviewed_at` was added in Phase 4. Requests approved or rejected
+  before that migration have no decision timestamp and therefore do not appear in
+  the employee dashboard's "Recent decisions" list.
+- `seed_demo` resets the demo accounts' passwords and the demo employees' profile
+  fields on every run so the documented logins keep working. It never deletes a
+  row and never touches non-demo accounts.

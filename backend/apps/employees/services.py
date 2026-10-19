@@ -138,6 +138,24 @@ def accept_invite(*, invite: EmployeeInvite, password: str) -> User:
 
     invite.accepted_at = timezone.now()
     invite.save(update_fields=["accepted_at"])
+
+    # Accepting changes only the User row, which the model signals do not track.
+    # Record the event explicitly in the same AuditLog, without the token.
+    from apps.audit.models import AuditLog
+    from apps.audit.services import record_event
+
+    record_event(
+        actor=user,
+        action=AuditLog.Action.UPDATE,
+        model="employees.employeeinvite",
+        object_id=invite.pk,
+        changes={
+            "accepted_at": {
+                "before": None,
+                "after": invite.accepted_at.isoformat(),
+            }
+        },
+    )
     return user
 
 
