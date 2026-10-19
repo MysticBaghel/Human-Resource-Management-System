@@ -27,14 +27,6 @@ frontend/
   src/auth/            session context, ProtectedRoute, RoleRoute
   src/components/      shadcn/ui style primitives, layout shell, shared states
   src/pages/           auth, dashboard, employees, teams, time off, audit
-docs/
-  AGENTS.md            standing rules
-  PERMISSIONS.md       every endpoint, the roles allowed, how it is scoped
-  Handbook.pdf         the build guide
-  Phase01.pdf          Phase 1 development and test report
-  Phase02.pdf          Phase 2 development and test report
-  Phase03.pdf          Phase 3 development and test report
-  Phase04.pdf          Phase 4 development and test report
 ```
 
 ## Requirements
@@ -219,8 +211,8 @@ All pages have loading, empty and error states and work down to 375px.
 
 ## API
 
-Everything lives under `/api/v1/`. Full role table: [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
-Auth is Django session + CSRF.
+Everything lives under `/api/v1/`. The role matrix is summarized under "Roles"
+below. Auth is Django session + CSRF.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
@@ -332,8 +324,6 @@ Honest inventory of what has and has not been checked.
   was possible.
 - `npm run lint` / `npm run test` — those scripts do not exist yet; ESLint and
   Vitest were not set up in Phase 1. Typecheck and build are the checks used.
-- `docs/HANDBOOK.md` is still missing from the repository (only the PDF exists);
-  the Phase 4 work was guided by the PDF, `AGENTS.md` and `docs/PERMISSIONS.md`.
 
 Anything claimed to work has one of the checks above behind it; the gaps are
 listed rather than glossed over.
