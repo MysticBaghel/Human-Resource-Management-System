@@ -5,7 +5,7 @@
  */
 
 import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { useAuth } from "@/auth/AuthContext";
@@ -82,38 +82,41 @@ export function Sidebar({
       </div>
 
       <nav aria-label="Main navigation" className="flex flex-1 flex-col gap-1">
-        {items.map((item) => {
+        {items.map((item, index) => {
           const Icon = item.icon;
+          const previous = items[index - 1];
+          const startsSection = Boolean(
+            item.section && item.section !== previous?.section,
+          );
+          const endsSection = Boolean(
+            item.section && item.section !== items[index + 1]?.section,
+          );
 
-          if (!item.available) {
-            return (
-              <span
-                key={item.path}
-                aria-disabled="true"
-                title={`${item.label} — coming in a later phase`}
-                className={cn(
-                  "flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/60",
-                  iconsOnly && "justify-center px-2",
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {!iconsOnly && (
-                  <>
-                    <span className="truncate">{item.label}</span>
-                    <span className="ml-auto text-[10px] uppercase tracking-wide opacity-70">
-                      soon
-                    </span>
-                  </>
-                )}
-              </span>
-            );
-          }
-
-          return (
+          const link = !item.available ? (
+            <span
+              key={item.path}
+              aria-disabled="true"
+              title={`${item.label} — coming in a later phase`}
+              className={cn(
+                "flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/60",
+                iconsOnly && "justify-center px-2",
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {!iconsOnly && (
+                <>
+                  <span className="truncate">{item.label}</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wide opacity-70">
+                    soon
+                  </span>
+                </>
+              )}
+            </span>
+          ) : (
             <NavLink
               key={item.path}
               to={item.path}
-              end={item.path === "/"}
+              end={item.path === "/" || item.path === "/payroll"}
               onClick={onCloseMobile}
               className={({ isActive }) =>
                 cn(
@@ -130,12 +133,32 @@ export function Sidebar({
               {!iconsOnly && <span className="truncate">{item.label}</span>}
             </NavLink>
           );
+
+          if (!startsSection && !endsSection) return link;
+
+          return (
+            <Fragment key={`section-${item.path}`}>
+              {startsSection ? (
+                !iconsOnly ? (
+                  <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    {item.section}
+                  </p>
+                ) : (
+                  <span className="my-1 border-t" aria-hidden="true" />
+                )
+              ) : null}
+              {link}
+              {endsSection ? (
+                <span className="my-1 border-t" aria-hidden="true" />
+              ) : null}
+            </Fragment>
+          );
         })}
       </nav>
 
       {!iconsOnly && (
         <p className="px-3 text-xs text-muted-foreground/70">
-          Phase 4 — dashboard and audit
+          People · time off · payroll
         </p>
       )}
     </div>

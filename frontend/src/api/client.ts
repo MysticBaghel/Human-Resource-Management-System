@@ -103,6 +103,49 @@ export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: "PATCH", body: body ?? {} });
 }
 
+/** Download a file (currently only PDF payslips) with the session cookie. */
+export async function apiDownload(
+  path: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const response = await fetch(buildPath(path), {
+    headers: { Accept: "application/pdf" },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: { detail?: string; code?: string; fields?: Record<string, string[]> } = {};
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = {};
+      }
+    }
+    throw new ApiError(
+      payload.detail ?? `Download failed with status ${response.status}.`,
+      response.status,
+      payload.code,
+      payload.fields,
+    );
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = match?.[1] ?? fallbackFilename;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 /** Ask Django to set the CSRF cookie before the first unsafe request. */
 export function ensureCsrfCookie(): Promise<void> {
   return request<{ detail: string }>("/auth/csrf/").then(() => undefined);

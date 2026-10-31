@@ -298,3 +298,49 @@ def leave_org(db, demo_org, leave_types, holidays, make_balance):
         ):
             make_balance(employee, leave_type, allocated=leave_type.annual_days)
     return SimpleNamespace(org=demo_org, types=leave_types, holidays=holidays)
+
+
+@pytest.fixture
+def make_salary_structure(db):
+    """Create an active salary structure with believable component values."""
+    from datetime import date
+    from decimal import Decimal
+
+    from apps.payroll.models import SalaryStructure
+
+    def _make_salary_structure(
+        employee,
+        *,
+        effective_date=None,
+        basic_salary="50000.00",
+        hra="20000.00",
+        conveyance_allowance="1600.00",
+        medical_allowance="1250.00",
+        special_allowance="5000.00",
+        other_allowances="0.00",
+        provident_fund="6000.00",
+        professional_tax="200.00",
+        income_tax="5000.00",
+        other_deductions="0.00",
+        is_active=True,
+    ):
+        def money(value):
+            return Decimal(str(value))
+
+        return SalaryStructure.objects.create(
+            employee=employee,
+            effective_date=effective_date or date(2025, 1, 1),
+            basic_salary=money(basic_salary),
+            hra=money(hra),
+            conveyance_allowance=money(conveyance_allowance),
+            medical_allowance=money(medical_allowance),
+            special_allowance=money(special_allowance),
+            other_allowances=money(other_allowances),
+            provident_fund=money(provident_fund),
+            professional_tax=money(professional_tax),
+            income_tax=money(income_tax),
+            other_deductions=money(other_deductions),
+            is_active=is_active,
+        )
+
+    return _make_salary_structure

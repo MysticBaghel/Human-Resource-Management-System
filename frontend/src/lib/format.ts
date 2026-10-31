@@ -38,3 +38,36 @@ export function formatDateTime(value: string): string {
     minute: "2-digit",
   });
 }
+
+const moneyFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Salary amounts are INR on the payslip and in the payroll screens. */
+export function formatMoney(value: number | string | null | undefined): string {
+  const amount =
+    typeof value === "string" ? Number(value) : (value ?? 0);
+  return moneyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+/** 10, 2026 -> "October 2026". */
+export function formatPayPeriod(month: number, year: number): string {
+  const names = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  return `${names[month - 1] ?? month} ${year}`;
+}

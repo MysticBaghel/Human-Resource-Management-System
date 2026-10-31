@@ -9,13 +9,17 @@
  */
 
 import {
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   ClipboardCheck,
+  Coins,
   LayoutDashboard,
+  ReceiptText,
   ScrollText,
   Users,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +33,8 @@ export type NavItem = {
   allow: Role[];
   /** False until the phase that builds it lands. */
   available: boolean;
+  /** Optional group heading rendered before the first item in the group. */
+  section?: string;
 };
 
 export const ALL_ROLES: Role[] = ["admin", "hr", "manager", "employee"];
@@ -54,6 +60,38 @@ export const NAV_ITEMS: NavItem[] = [
     icon: UsersRound,
     allow: ["admin", "hr"],
     available: true,
+  },
+  {
+    label: "Payroll",
+    path: "/payroll",
+    icon: Wallet,
+    allow: ["admin", "hr"],
+    available: true,
+    section: "Payroll",
+  },
+  {
+    label: "Salary structures",
+    path: "/payroll/salary-structures",
+    icon: Coins,
+    allow: ["admin", "hr"],
+    available: true,
+    section: "Payroll",
+  },
+  {
+    label: "Monthly payroll",
+    path: "/payroll/monthly",
+    icon: CalendarClock,
+    allow: ["admin", "hr"],
+    available: true,
+    section: "Payroll",
+  },
+  {
+    label: "My payslips",
+    path: "/payroll/my",
+    icon: ReceiptText,
+    allow: ALL_ROLES,
+    available: true,
+    section: "Payroll",
   },
   {
     label: "My time off",

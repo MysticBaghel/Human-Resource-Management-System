@@ -6,6 +6,9 @@ MODEL_LABELS = {
     "organization.team": "Team",
     "timeoff.leavetype": "Leave type",
     "timeoff.leaverequest": "Leave request",
+    "payroll.salarystructure": "Salary structure",
+    "payroll.salaryrevision": "Salary revision",
+    "payroll.payrollrecord": "Payroll record",
 }
 
 ACTION_LABELS = {
@@ -64,6 +67,24 @@ def summarize(log) -> str:
 
     if log.model == "employees.employeeinvite" and "accepted_at" in changes:
         return f"Accepted employee invite #{log.object_id}"
+
+    if log.model == "payroll.payrollrecord":
+        status = _status_change(changes)
+        if status is not None and status.get("after") == "finalized":
+            return f"Finalized payroll record #{log.object_id}"
+        payment = (changes.get("changes") or {}).get("payment_status")
+        if isinstance(payment, dict):
+            if payment.get("after") == "paid":
+                return f"Marked payroll #{log.object_id} paid"
+            if payment.get("after") == "failed":
+                return f"Marked payroll #{log.object_id} failed"
+        if log.action == "create":
+            return f"Generated payroll record #{log.object_id}"
+
+    if log.model == "payroll.salaryrevision":
+        after = changes.get("after") or {}
+        employee_id = after.get("employee") or after.get("employee_id") or log.object_id
+        return f"Revised salary structure for employee #{employee_id}"
 
     label = model_label(log.model).lower()
     if log.action == "create":

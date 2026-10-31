@@ -1,5 +1,7 @@
 """Root URL configuration."""
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
@@ -13,5 +15,11 @@ urlpatterns = [
     path("api/v1/", include("apps.timeoff.urls")),
     path("api/v1/", include("apps.audit.urls")),
     path("api/v1/", include("apps.dashboard.urls")),
+    path("api/v1/payroll/", include("apps.payroll.urls")),
     path("api/v1/", include("apps.core.urls")),
 ]
+
+# In development Django serves uploaded logos. Production must serve MEDIA_ROOT
+# (or object storage) at MEDIA_URL through the web server.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -12,6 +12,10 @@ import { AuditLogPage } from "@/pages/audit/AuditLogPage";
 import { EmployeeDetailPage } from "@/pages/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/pages/employees/EmployeeFormPage";
 import { EmployeesPage } from "@/pages/employees/EmployeesPage";
+import { MonthlyPayrollPage } from "@/pages/payroll/MonthlyPayrollPage";
+import { MyPayslipsPage } from "@/pages/payroll/MyPayslipsPage";
+import { PayrollDashboardPage } from "@/pages/payroll/PayrollDashboardPage";
+import { SalaryStructuresPage } from "@/pages/payroll/SalaryStructuresPage";
 import { TeamsPage } from "@/pages/teams/TeamsPage";
 import { ApprovalsPage } from "@/pages/timeoff/ApprovalsPage";
 import { EmployeeTimeOffPage } from "@/pages/timeoff/EmployeeTimeOffPage";
@@ -44,6 +48,17 @@ export default function App() {
             <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
             <Route path="/teams" element={<TeamsPage />} />
             <Route path="/audit-log" element={<AuditLogPage />} />
+          </Route>
+
+          {/* Payroll: HR/admin manage; everyone has their own payslips. */}
+          <Route path="/payroll/my" element={<MyPayslipsPage />} />
+          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
+            <Route path="/payroll" element={<PayrollDashboardPage />} />
+            <Route
+              path="/payroll/salary-structures"
+              element={<SalaryStructuresPage />}
+            />
+            <Route path="/payroll/monthly" element={<MonthlyPayrollPage />} />
           </Route>
 
           {/* Time off: everyone has their own page and calendar; approvals are

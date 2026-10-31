@@ -42,6 +42,9 @@ export const AUDIT_MODELS = [
   { value: "timeoff.leaverequest", label: "Leave request" },
   { value: "timeoff.leavetype", label: "Leave type" },
   { value: "employees.employeeinvite", label: "Employee invite" },
+  { value: "payroll.salarystructure", label: "Salary structure" },
+  { value: "payroll.salaryrevision", label: "Salary revision" },
+  { value: "payroll.payrollrecord", label: "Payroll record" },
 ] as const;
 
 export const auditKeys = {

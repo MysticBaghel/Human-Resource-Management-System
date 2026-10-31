@@ -3,10 +3,11 @@
 A small HR system for one company: employees, teams, time off and an audit log.
 Django + DRF backend, React + Vite frontend, PostgreSQL.
 
-**Current state: Phase 4 (role-aware dashboard, audit log browsing, demo data) is
-implemented.** Post-MVP features have not been started. What has actually been run
-is listed under "Verified status" at the bottom — read that before trusting any
-claim.
+**Current state: Phase 4 plus the payroll and payslip module is implemented.**
+Salary structures, revisions, monthly payroll, PDF payslips and the employee
+payslip portal are integrated with the existing auth, roles, audit log and UI.
+What has actually been run is listed under "Verified status" at the bottom —
+read that before trusting any claim.
 
 ## Layout
 
@@ -20,13 +21,14 @@ backend/
                        allocate_balances, /api/v1/leave-*/
   apps/dashboard/      role-scoped /api/v1/dashboard/ service
   apps/audit/          AuditLog, signals, middleware, /api/v1/audit-logs/
+  apps/payroll/        salary structures, revisions, payroll records, ReportLab payslips
   apps/core/           permissions, role scoping, pagination, error shape, health
   tests/               pytest tests
 frontend/
   src/api/             HTTP client + TanStack Query hooks per resource
   src/auth/            session context, ProtectedRoute, RoleRoute
   src/components/      shadcn/ui style primitives, layout shell, shared states
-  src/pages/           auth, dashboard, employees, teams, time off, audit
+  src/pages/           auth, dashboard, employees, teams, time off, audit, payroll
 ```
 
 ## Requirements
@@ -131,6 +133,49 @@ deactivated.
   editable by HR through `/api/v1/leave-types/`; holidays are managed in the
   Django admin or by the seed.
 
+## Payroll
+
+The payroll module lives in `backend/apps/payroll` and is exposed under
+`/api/v1/payroll/`. It uses `DecimalField`/`Decimal` for every amount; no salary
+calculation touches floating point.
+
+- **Salary structure** — basic salary, HRA, conveyance, medical, special and other
+  allowances; PF, professional tax, income tax/TDS and other deductions. Gross,
+  total deductions and net are calculated from the components. An employee can
+  have one active structure; editing creates a new active version and marks the
+  previous row inactive.
+- **Revision history** — `SalaryRevision` stores the previous and new component
+  snapshots, effective date, the user who revised it and the timestamp. Revision
+  effective dates cannot move backwards, which keeps "newest effective version
+  wins" unambiguous.
+- **Payroll generation** — HR/admin choose a month/year and either one employee or
+  all eligible active employees. The applicable structure is the newest version
+  effective on or before the period end. Every component, the employee name, ID,
+  designation, department and joining date are snapshotted into the payroll row.
+  A database unique constraint on `(employee, year, month)` prevents duplicates.
+- **Draft and finalized** — adjustments (positive or negative, with a note) are
+  allowed only on drafts. Finalizing locks the snapshot, records who finalized it
+  and when, and cannot be undone. Later structure revisions never touch existing
+  payroll records, draft or finalized.
+- **Payments** — statuses are `pending`, `paid` and `failed`; HR/admin can record
+  a payment date and reference. No bank transfer or gateway call is made.
+- **Payslips** — each payroll record has a unique payslip number. ReportLab
+  generates a one-page corporate PDF with the company name/logo, employee
+  details, earnings, deductions, adjustment, net pay and payment status. The
+  company name and logo come from `organization.CompanyProfile` (Django admin);
+  if no profile exists the `PAYROLL_COMPANY_NAME` setting is used.
+- **Employee portal** — the "My payslips" page shows the signed-in person's own
+  salary structure (read-only), finalized payroll history and PDF downloads.
+  Employees and managers only ever see their own records; drafts and other
+  people's records are hidden by the API queryset, not by the UI.
+
+Set `PAYROLL_COMPANY_NAME` (default `HRMS`) in the environment, and create the
+company profile in `/admin/organization/companyprofile/` for the logo. Payslips
+use INR; the frontend and the PDF rendering share that currency. In production
+serve the uploaded logo from `MEDIA_URL`/`MEDIA_ROOT` (Django serves it in
+development). PDF files are never stored: they are rendered on demand from the
+snapshotted payroll row.
+
 ## Database
 
 `DATABASE_URL` decides the database:
@@ -191,8 +236,9 @@ npm run build       # tsc -b && vite build
 ```
 
 Pages: role-aware dashboard, login/forgot/reset, employee list/detail/form, teams,
-accept invite, **My time off**, **Approvals**, **Team calendar**, and the **Audit
-log** for HR and admin.
+accept invite, **My time off**, **Approvals**, **Team calendar**, the **Audit log**
+for HR and admin, and the payroll pages: **Payroll dashboard**, **Salary
+structures**, **Monthly payroll** (HR/admin) and **My payslips** (everyone).
 
 - The dashboard is computed from the database per role: admin and HR get company
   counts and activity, managers get their team's pending approvals and upcoming
@@ -205,7 +251,18 @@ log** for HR and admin.
 - The request dialog calls the API for a live working-day and balance preview.
 - The team calendar is a month grid, coloured by leave type, with holidays.
 - The audit log page has filters for action, resource, actor and date range,
-  search, pagination, and a detail dialog with before/after changes.
+  search, pagination, and a detail dialog with before/after changes. Payroll
+  structures, revisions and records are included in the resource filter.
+- Payroll dashboard: employees with structures, this month's payroll total, paid
+  and pending amounts, draft/finalized counts, failed payments and recent
+  activity.
+- Salary structures: current structure per employee, create/revise dialogs with a
+  live total preview, and revision history with before/after values.
+- Monthly payroll: month/year selector, generate (one or all), filters, draft
+  adjustment and finalization, bulk finalize, payment status dialog and PDF
+  download.
+- My payslips: own salary breakdown, finalized history, payment status and PDF
+  downloads, with loading, empty and error states.
 
 All pages have loading, empty and error states and work down to 375px.
 
@@ -249,6 +306,20 @@ below. Auth is Django session + CSRF.
 | GET | `/audit-logs/` | hr, admin | audit feed; `action`, `model`, `actor`, `date_from`, `date_to`, `search`, `page` |
 | GET | `/audit-logs/{id}/` | hr, admin | one audit event with its changes |
 | GET | `/audit-logs/actors/` | hr, admin | distinct actors for the filter |
+| GET | `/payroll/dashboard/` | hr, admin | current-month payroll metrics and recent activity |
+| GET | `/payroll/salary-structures/` | session, scoped | list structures; employee/manager see only their own |
+| POST | `/payroll/salary-structures/` | hr, admin | create an employee's first structure |
+| GET | `/payroll/salary-structures/{id}/` | session, scoped | one structure |
+| PATCH / PUT | `/payroll/salary-structures/{id}/` | hr, admin | revise; creates a new active version |
+| DELETE | `/payroll/salary-structures/{id}/` | — | 405; versions are kept |
+| GET | `/payroll/salary-revisions/` | hr, admin | revision history, filter by `employee` |
+| GET | `/payroll/records/` | session, scoped | payroll history; `mine`, `year`, `month`, `status`, `payment_status`, `employee`, `search` |
+| PATCH | `/payroll/records/{id}/` | hr, admin | adjust a draft (`adjustment_amount`, `adjustment_note`) |
+| POST | `/payroll/records/generate/` | hr, admin | generate drafts for one employee or all eligible |
+| POST | `/payroll/records/{id}/finalize/` | hr, admin | freeze one draft |
+| POST | `/payroll/records/finalize-period/` | hr, admin | freeze every draft in a month |
+| POST | `/payroll/records/{id}/payment/` | hr, admin | record `pending`/`paid`/`failed`, date and reference |
+| GET | `/payroll/records/{id}/payslip/` | owner or hr/admin | PDF payslip for a finalized record (HR can preview drafts) |
 
 The audit endpoints are read-only: POST, PATCH and DELETE return 405, and
 managers/employees get 403. Dashboard data is one role-scoped payload; the
@@ -262,10 +333,10 @@ employee response contains no company-wide fields.
 
 | Role | Scope |
 |---|---|
-| admin | Everything, including roles and settings |
-| hr | All employees and teams, leave types, all leave requests |
-| manager | Own team: view members, approve or reject their leave |
-| employee | Own profile (limited edits) and own leave |
+| admin | Everything, including roles, settings and payroll |
+| hr | All employees and teams, leave types, all leave requests, all payroll |
+| manager | Own team: view members, approve or reject their leave; own payslips only |
+| employee | Own profile (limited edits), own leave, own salary structure and finalized payslips |
 
 Permissions are enforced by DRF permission classes on every view, and querysets
 are narrowed by `apps/core/scoping.py`. Route guards in React are a UX layer
@@ -291,12 +362,17 @@ Honest inventory of what has and has not been checked.
 - `python manage.py seed_demo` — 3 teams, 20 demo users/employees and 10 requests
   (3 pending, 4 approved, 3 rejected); audit writes suppressed; re-running keeps
   the counts stable and deletes nothing.
-- `pytest` — **299 passed, 2 skipped** on SQLite (the two skips are the
-  Postgres-only exclusion-constraint tests).
-- `pytest --ds=config.settings.test_postgres` — **301 passed** against
-  PostgreSQL 18, including both exclusion-constraint tests.
+- `python manage.py makemigrations --check --dry-run` — no pending changes
+  (the payroll and company-profile migrations are committed).
+- `python manage.py migrate` — applied on the local SQLite development database.
+- `pytest` — **353 passed, 2 skipped** on SQLite. The 54 payroll tests cover
+  calculations, permissions, revisions, generation, duplicates, adjustments,
+  finalization, payment statuses, ownership restrictions, PDF generation, the
+  dashboard and audit rows. The two skips are the Postgres-only exclusion
+  constraint tests.
+- `ruff check --select E,F` on the changed payroll/backend files — clean.
 - `tsc --noEmit` — clean.
-- `npm run build` — production bundle built (502 kB JS, 148 kB gzip; Vite warns
+- `npm run build` — production bundle built (557 kB JS, 160 kB gzip; Vite warns
   that the single chunk is just over 500 kB).
 - Live checks against the dev PostgreSQL database through Django's test client:
   HR dashboard returned 25 active employees, 5 teams, 3 pending requests and 2
@@ -311,19 +387,32 @@ Honest inventory of what has and has not been checked.
   calendar shows the approved leave; Evan cancels and the balance returns to 20;
   cancelling twice is refused; the seeded request stays pending; the audit rows
   are create (Evan), approve (manager), cancel (Evan).
+- Live payroll HTTP checks against `runserver` on the development database: HR
+  read the payroll dashboard, salary structures, payroll records and downloaded a
+  PDF (`application/pdf`, one page); an employee account read only its own
+  finalized record and structure, downloaded its own payslip, and received 403
+  for the dashboard/revisions/finalize and 404 for another employee's structure
+  and record.
+- A generated payslip was rendered with `pdftoppm` and inspected: company header,
+  employee details, earnings/deductions tables, adjustment, net pay, payment
+  details and footer all fit on one A4 page.
 
 **Not verified:**
 
 - The React pages in a browser. The bundle compiles and the API behind every
-  page was exercised over HTTP, but nobody has clicked through the dashboard
-  cards, audit filters, detail dialog or the 375px layout.
+  page was exercised over HTTP, but nobody has clicked through the payroll
+  dialogs, salary revision history, employee portal or the 375px layout.
+- The new payroll migrations have not been re-run against PostgreSQL in this
+  session: the local server accepts connections but no database credentials were
+  available. The SQLite suite passes; the constraints are standard partial-unique,
+  check and foreign-key constraints.
 - The Django admin forms. Access was checked earlier for the seeded `admin@`;
-  editing through the admin was not exercised.
-- `ruff` — declared in `requirements.txt` but not installed in `backend/.venv`,
-  and installing it was blocked by this session's Windows sandbox. No lint run
-  was possible.
+  editing teams or uploading a company logo through the admin was not exercised.
 - `npm run lint` / `npm run test` — those scripts do not exist yet; ESLint and
   Vitest were not set up in Phase 1. Typecheck and build are the checks used.
+- Payroll PDFs are generated on demand and not stored, so there is no historical
+  copy of a PDF if reportlab's output changes in a future release; the payroll
+  row and all of its snapshots remain immutable, which is the source of truth.
 
 Anything claimed to work has one of the checks above behind it; the gaps are
 listed rather than glossed over.
@@ -336,3 +425,6 @@ listed rather than glossed over.
 - `seed_demo` resets the demo accounts' passwords and the demo employees' profile
   fields on every run so the documented logins keep working. It never deletes a
   row and never touches non-demo accounts.
+- The payroll module deliberately adds no salary or payroll rows to `seed_users`
+  or `seed_demo`: payroll data must be created by HR through the module, not
+  shipped as mock production data.

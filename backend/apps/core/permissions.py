@@ -16,9 +16,7 @@ class HasRole(BasePermission):
     def has_permission(self, request, view) -> bool:
         user = request.user
         return bool(
-            user
-            and user.is_authenticated
-            and getattr(user, "role", None) in self.roles
+            user and user.is_authenticated and getattr(user, "role", None) in self.roles
         )
 
 
@@ -64,11 +62,7 @@ class IsReadOnly(BasePermission):
 
     def has_permission(self, request, view) -> bool:
         user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and request.method in SAFE_METHODS
-        )
+        return bool(user and user.is_authenticated and request.method in SAFE_METHODS)
 
 
 class EmployeePermission(BasePermission):
@@ -179,3 +173,43 @@ class LeaveRequestPermission(BasePermission):
         # list/retrieve/create/preview/cancel: the queryset and the service
         # narrow what is actually possible.
         return True
+
+
+class SalaryStructurePermission(BasePermission):
+    """Payroll salary data.
+
+    Reading is scoped per person in the queryset: employees and managers see
+    only their own structure, HR and admin see everyone. Only HR and admin may
+    change salary data, and salary rows are never deleted.
+    """
+
+    message = "Only HR or an admin can change salary structures."
+    WRITE_ROLES = frozenset({"hr", "admin"})
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return user.role in self.WRITE_ROLES
+
+
+class PayrollRecordPermission(BasePermission):
+    """Employee-facing reads are scoped to the owner and finalized records.
+
+    Custom payroll actions (generate, adjust, finalize, payment) are HR/admin
+    only. A payslip download is a safe GET, so the scoped queryset is what
+    prevents an employee reaching somebody else's record.
+    """
+
+    message = "Only HR or an admin can manage payroll records."
+    WRITE_ROLES = frozenset({"hr", "admin"})
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return user.role in self.WRITE_ROLES

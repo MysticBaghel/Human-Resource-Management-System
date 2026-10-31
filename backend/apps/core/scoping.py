@@ -94,7 +94,9 @@ def scope_leave_requests(queryset: QuerySet, user) -> QuerySet:
     if _is_hr_or_admin(user):
         return queryset
     if getattr(user, "role", None) == "manager":
-        return queryset.filter(Q(employee__team__lead__user=user) | Q(employee__user=user))
+        return queryset.filter(
+            Q(employee__team__lead__user=user) | Q(employee__user=user)
+        )
     if getattr(user, "role", None) == "employee":
         return queryset.filter(employee__user=user)
     return _empty_like(queryset)
@@ -119,7 +121,9 @@ def scope_calendar_requests(queryset: QuerySet, user) -> QuerySet:
     if _is_hr_or_admin(user):
         return queryset
     if getattr(user, "role", None) == "manager":
-        return queryset.filter(Q(employee__team__lead__user=user) | Q(employee__user=user))
+        return queryset.filter(
+            Q(employee__team__lead__user=user) | Q(employee__user=user)
+        )
 
     employee = getattr(user, "employee", None)
     if employee is None:
@@ -129,6 +133,25 @@ def scope_calendar_requests(queryset: QuerySet, user) -> QuerySet:
             Q(employee__team_id=employee.team_id) | Q(employee__user=user)
         )
     return queryset.filter(employee__user=user)
+
+
+def scope_employee_owned(queryset: QuerySet, user, *, mine: bool = False) -> QuerySet:
+    """Narrow a payroll-owned queryset to the caller's own employee record.
+
+    - hr, admin: everyone, unless the caller is explicitly asking for ``mine``.
+    - employee, manager: always their own record only.
+    - an account with no employee row: nothing.
+
+    Used by salary structures and payroll records. Keeping it here means both
+    surfaces apply exactly the same ownership rule.
+    """
+    if _is_hr_or_admin(user) and not mine:
+        return queryset
+
+    employee = getattr(user, "employee", None)
+    if employee is None:
+        return _empty_like(queryset)
+    return queryset.filter(employee=employee)
 
 
 ROLE_SCOPES: dict[str, dict[str, ScopeStrategy]] = {

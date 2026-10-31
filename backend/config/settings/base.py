@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.timeoff",
     "apps.dashboard",
     "apps.audit",
+    "apps.payroll",
 ]
 
 MIDDLEWARE = [
@@ -119,6 +120,16 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Uploaded organisation logos. In development Django serves this; in
+# production the web server (or object storage) must serve MEDIA_ROOT.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Payslip defaults. An organisation.CompanyProfile overrides the company name
+# and logo when one exists.
+PAYROLL_CURRENCY = "INR"
+PAYROLL_COMPANY_NAME = env("PAYROLL_COMPANY_NAME", default="HRMS")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
