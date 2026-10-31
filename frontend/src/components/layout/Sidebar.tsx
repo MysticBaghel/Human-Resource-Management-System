@@ -116,7 +116,11 @@ export function Sidebar({
             <NavLink
               key={item.path}
               to={item.path}
-              end={item.path === "/" || item.path === "/payroll"}
+              end={
+                item.path === "/" ||
+                item.path === "/payroll" ||
+                item.path === "/invoices"
+              }
               onClick={onCloseMobile}
               className={({ isActive }) =>
                 cn(
@@ -158,7 +162,7 @@ export function Sidebar({
 
       {!iconsOnly && (
         <p className="px-3 text-xs text-muted-foreground/70">
-          People · time off · payroll
+          People · time off · payroll · invoices
         </p>
       )}
     </div>

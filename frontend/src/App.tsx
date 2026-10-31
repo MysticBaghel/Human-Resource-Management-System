@@ -9,6 +9,9 @@ import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
 import { AuditLogPage } from "@/pages/audit/AuditLogPage";
+import { ClientsPage } from "@/pages/invoices/ClientsPage";
+import { InvoiceDetailPage } from "@/pages/invoices/InvoiceDetailPage";
+import { InvoicesPage } from "@/pages/invoices/InvoicesPage";
 import { EmployeeDetailPage } from "@/pages/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/pages/employees/EmployeeFormPage";
 import { EmployeesPage } from "@/pages/employees/EmployeesPage";
@@ -48,6 +51,13 @@ export default function App() {
             <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
             <Route path="/teams" element={<TeamsPage />} />
             <Route path="/audit-log" element={<AuditLogPage />} />
+          </Route>
+
+          {/* Invoices are company financial records: HR and admin only. */}
+          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
+            <Route path="/invoices" element={<InvoicesPage />} />
+            <Route path="/invoices/clients" element={<ClientsPage />} />
+            <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           </Route>
 
           {/* Payroll: HR/admin manage; everyone has their own payslips. */}

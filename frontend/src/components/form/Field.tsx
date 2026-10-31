@@ -7,7 +7,7 @@ type FieldProps = {
   id: string;
   label: string;
   error?: string;
-  hint?: string;
+  hint?: ReactNode;
   children: ReactNode;
 };
 

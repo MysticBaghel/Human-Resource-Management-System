@@ -103,13 +103,61 @@ export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: "PATCH", body: body ?? {} });
 }
 
-/** Download a file (currently only PDF payslips) with the session cookie. */
+export function apiDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "DELETE" });
+}
+
+/** POST a FormData body (file uploads) with the session cookie and CSRF token. */
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  const csrfToken = readCookie("csrftoken");
+  if (csrfToken) {
+    headers["X-CSRFToken"] = csrfToken;
+  }
+
+  const response = await fetch(buildPath(path), {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: formData,
+  });
+
+  const text = await response.text();
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const data = (payload ?? {}) as {
+      detail?: string;
+      code?: string;
+      fields?: Record<string, string[]>;
+    };
+    throw new ApiError(
+      data.detail ?? `Upload failed with status ${response.status}.`,
+      response.status,
+      data.code,
+      data.fields,
+    );
+  }
+
+  return payload as T;
+}
+
+/** Download a file (PDF payslips, invoice PDFs, uploaded files) with the session cookie. */
 export async function apiDownload(
   path: string,
   fallbackFilename: string,
 ): Promise<void> {
   const response = await fetch(buildPath(path), {
-    headers: { Accept: "application/pdf" },
+    // Binary endpoints (PDFs, uploads) may return any content type; do not
+    // let DRF content negotiation reject the request before the file is sent.
+    headers: { Accept: "*/*" },
     credentials: "include",
   });
 

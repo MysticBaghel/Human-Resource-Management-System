@@ -344,3 +344,127 @@ def make_salary_structure(db):
         )
 
     return _make_salary_structure
+
+
+@pytest.fixture
+def api_upload(api_client):
+    """POST multipart form data with the current CSRF token (for file uploads)."""
+    from conftest import _csrf_headers
+
+    def _upload(path: str, data: dict):
+        return api_client.post(
+            path, data, format="multipart", **_csrf_headers(api_client)
+        )
+
+    return _upload
+
+
+@pytest.fixture
+def api_delete(api_client):
+    """DELETE with the current CSRF token."""
+    from conftest import _csrf_headers
+
+    def _delete(path: str):
+        return api_client.delete(path, **_csrf_headers(api_client))
+
+    return _delete
+
+
+@pytest.fixture
+def media_root(settings, tmp_path):
+    """Point uploads at a temporary directory for one test."""
+    settings.MEDIA_ROOT = tmp_path
+    return tmp_path
+
+
+@pytest.fixture
+def make_client(db):
+    """Create a billable client with a believable billing address."""
+    from apps.invoices.models import Client
+
+    def _make_client(name: str = "Acme Industries", **extra):
+        defaults = {
+            "contact_name": "Priya Client",
+            "email": "billing@acme.test",
+            "phone": "+91 22 5550 1000",
+            "billing_address": "12 Market Road\nMumbai 400001",
+            "tax_id": "27AABCU9603R1ZM",
+        }
+        defaults.update(extra)
+        return Client.objects.create(name=name, **defaults)
+
+    return _make_client
+
+
+@pytest.fixture
+def make_invoice(db, make_client):
+    """Create an invoice with line items, bypassing the API for test setup."""
+    from datetime import date
+    from decimal import Decimal
+
+    from apps.invoices.models import Invoice, InvoiceLineItem
+    from apps.invoices.services import (
+        allocate_invoice_number,
+        calculate_totals,
+        client_snapshot,
+        normalise_items,
+    )
+
+    def _make_invoice(
+        client=None,
+        *,
+        actor=None,
+        issue_date=None,
+        due_date=None,
+        items=None,
+        status="sent",
+        discount_amount="0.00",
+        tax_rate="0.00",
+        amount_paid="0.00",
+        currency="INR",
+    ):
+        client = client or make_client()
+        issue_date = issue_date or date(2026, 1, 5)
+        due_date = due_date or date(2026, 2, 4)
+        raw_items = items or [
+            {
+                "description": "Consulting services",
+                "quantity": "2",
+                "unit_price": "1000.00",
+            }
+        ]
+        lines = normalise_items(raw_items)
+        paid = Decimal(str(amount_paid))
+        totals = calculate_totals(
+            lines,
+            Decimal(str(discount_amount)),
+            Decimal(str(tax_rate)),
+            amount_paid=paid,
+        )
+        invoice = Invoice.objects.create(
+            client=client,
+            invoice_number=allocate_invoice_number(issue_date),
+            issue_date=issue_date,
+            due_date=due_date,
+            status=status,
+            currency=currency,
+            created_by=actor,
+            **client_snapshot(client),
+            **totals,
+        )
+        InvoiceLineItem.objects.bulk_create(
+            [
+                InvoiceLineItem(
+                    invoice=invoice,
+                    position=index,
+                    description=line["description"],
+                    quantity=line["quantity"],
+                    unit_price=line["unit_price"],
+                    amount=line["amount"],
+                )
+                for index, line in enumerate(lines)
+            ]
+        )
+        return invoice
+
+    return _make_invoice

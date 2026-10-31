@@ -29,7 +29,4 @@ Thumbs.db
 
 # Local tooling leftovers
 .tmp/
-
-#docs
 docs/
-*.pdf

@@ -9,6 +9,11 @@ MODEL_LABELS = {
     "payroll.salarystructure": "Salary structure",
     "payroll.salaryrevision": "Salary revision",
     "payroll.payrollrecord": "Payroll record",
+    "invoices.client": "Client",
+    "invoices.invoice": "Invoice",
+    "invoices.invoicepayment": "Invoice payment",
+    "invoices.invoicereminder": "Invoice reminder",
+    "invoices.invoiceattachment": "Invoice attachment",
 }
 
 ACTION_LABELS = {
@@ -86,6 +91,32 @@ def summarize(log) -> str:
         employee_id = after.get("employee") or after.get("employee_id") or log.object_id
         return f"Revised salary structure for employee #{employee_id}"
 
+    if log.model == "invoices.invoice":
+        return _summarize_invoice(log, changes)
+
+    if log.model == "invoices.invoicepayment":
+        after = changes.get("after") or {}
+        amount = after.get("amount")
+        invoice_id = after.get("invoice") or log.object_id
+        prefix = f"Recorded payment of {amount}" if amount else "Recorded a payment"
+        return f"{prefix} on invoice #{invoice_id}"
+
+    if log.model == "invoices.invoicereminder":
+        after = changes.get("after") or {}
+        invoice_id = after.get("invoice", log.object_id)
+        return f"Sent payment reminder for invoice #{invoice_id}"
+
+    if log.model == "invoices.invoiceattachment":
+        if log.action == "delete":
+            before = changes.get("before") or {}
+            name = before.get("original_name") or f"#{log.object_id}"
+        else:
+            after = changes.get("after") or {}
+            name = after.get("original_name") or f"#{log.object_id}"
+        if log.action == "delete":
+            return f"Removed invoice attachment {name}"
+        return f"Uploaded invoice attachment {name}"
+
     label = model_label(log.model).lower()
     if log.action == "create":
         name = _display_name(changes.get("after") or {})
@@ -94,3 +125,32 @@ def summarize(log) -> str:
         name = _display_name(changes.get("before") or {})
         return f"Deleted {label} #{log.object_id}" + (f" ({name})" if name else "")
     return f"Updated {label} #{log.object_id}"
+
+
+def _summarize_invoice(log, changes: dict) -> str:
+    """Summary lines for generated, sent, paid and reminded invoices."""
+    if log.action == "create":
+        after = changes.get("after") or {}
+        number = after.get("invoice_number") or f"#{log.object_id}"
+        client = after.get("client_name")
+        return f"Generated invoice {number}" + (f" for {client}" if client else "")
+
+    after = changes.get("after") or {}
+    number = after.get("invoice_number") or f"#{log.object_id}"
+    status = _status_change(changes)
+    if status is not None:
+        next_status = status.get("after")
+        if next_status == "sent":
+            return f"Sent invoice {number}"
+        if next_status == "partially_paid":
+            return f"Recorded a payment on invoice {number}"
+        if next_status == "paid":
+            return f"Marked invoice {number} paid"
+        if next_status == "cancelled":
+            return f"Cancelled invoice {number}"
+
+    if "reminder_count" in (changes.get("changes") or {}):
+        return f"Sent payment reminder for invoice {number}"
+    if "balance_due" in (changes.get("changes") or {}):
+        return f"Recorded a payment on invoice {number}"
+    return f"Updated invoice {number}"

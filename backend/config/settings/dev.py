@@ -8,6 +8,11 @@ DEBUG = True
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "hrms@localhost"
 
+# Without Gmail OAuth credentials, invoice emails are printed by the console
+# backend rather than failing. Configure the GMAIL_* values to use the real
+# Gmail API path in development too.
+INVOICE_EMAIL_FALLBACK = True
+
 # The Vite dev server proxies /api, so requests reach Django from either origin.
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",

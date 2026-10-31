@@ -15,6 +15,13 @@ from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from apps.employees.models import Employee
+from apps.invoices.models import (
+    Client,
+    Invoice,
+    InvoiceAttachment,
+    InvoicePayment,
+    InvoiceReminder,
+)
 from apps.organization.models import Team
 from apps.payroll.models import PayrollRecord, SalaryRevision, SalaryStructure
 from apps.timeoff.models import LeaveRequest, LeaveType
@@ -31,6 +38,11 @@ TRACKED_MODELS = (
     SalaryStructure,
     SalaryRevision,
     PayrollRecord,
+    Client,
+    Invoice,
+    InvoicePayment,
+    InvoiceReminder,
+    InvoiceAttachment,
 )
 
 
@@ -92,7 +104,9 @@ def _record_save(sender, instance, created: bool, raw: bool = False, **kwargs) -
 
     if created or before is None:
         action = AuditLog.Action.CREATE
-        changes: dict[str, Any] = {"after": after}
+        # A service can attach related rows (invoice line items) to the same
+        # single create row instead of writing a second audit entry.
+        changes: dict[str, Any] = {"after": after, **extra}
     else:
         diff = changed_fields(before, after)
         # A service can report changes that live outside the model row (a

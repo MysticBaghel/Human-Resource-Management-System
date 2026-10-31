@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.dashboard",
     "apps.audit",
     "apps.payroll",
+    "apps.invoices",
 ]
 
 MIDDLEWARE = [
@@ -97,7 +98,12 @@ else:
 AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        )
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -130,6 +136,29 @@ MEDIA_ROOT = BASE_DIR / "media"
 # and logo when one exists.
 PAYROLL_CURRENCY = "INR"
 PAYROLL_COMPANY_NAME = env("PAYROLL_COMPANY_NAME", default="HRMS")
+
+# Invoice defaults. Reminders are plain email through Django's configured
+# backend; the cooldown stops a daily scheduler from emailing every day.
+INVOICE_DEFAULT_CURRENCY = env("INVOICE_DEFAULT_CURRENCY", default="INR")
+INVOICE_REMINDER_COOLDOWN_DAYS = env.int(
+    "INVOICE_REMINDER_COOLDOWN_DAYS", default=3
+)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="hrms@localhost")
+
+# Gmail API sending with OAuth 2.0. Obtain the refresh token with
+# `python manage.py gmail_oauth_setup`; all four values are required to send
+# through Gmail. When they are absent, development can use Django's email
+# backend through INVOICE_EMAIL_FALLBACK. Production should leave the fallback
+# off so a misconfiguration is an error, not a silent no-op.
+GMAIL_CLIENT_ID = env("GMAIL_CLIENT_ID", default="")
+GMAIL_CLIENT_SECRET = env("GMAIL_CLIENT_SECRET", default="")
+GMAIL_REFRESH_TOKEN = env("GMAIL_REFRESH_TOKEN", default="")
+GMAIL_SENDER_EMAIL = env("GMAIL_SENDER_EMAIL", default="")
+GMAIL_SENDER_NAME = env(
+    "GMAIL_SENDER_NAME", default=env("PAYROLL_COMPANY_NAME", default="HRMS")
+)
+GMAIL_TOKEN_URI = "https://oauth2.googleapis.com/token"
+INVOICE_EMAIL_FALLBACK = env.bool("INVOICE_EMAIL_FALLBACK", default=False)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

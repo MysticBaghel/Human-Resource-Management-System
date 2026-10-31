@@ -794,6 +794,20 @@ class TestPayslipPdf:
         assert "attachment" in response["Content-Disposition"]
         assert response.content.startswith(b"%PDF")
 
+    def test_payslip_accepts_a_pdf_accept_header(
+        self, auth_client, api_client, api_write, demo_org, make_salary_structure
+    ):
+        record_id = self._finalized(
+            auth_client, api_write, demo_org, make_salary_structure
+        )
+
+        response = api_client.get(
+            f"{RECORDS}{record_id}/payslip/", HTTP_ACCEPT="application/pdf"
+        )
+
+        assert response.status_code == 200
+        assert response.content.startswith(b"%PDF")
+
     def test_employee_downloads_own_finalized_payslip(
         self, auth_client, api_client, api_write, demo_org, make_salary_structure
     ):

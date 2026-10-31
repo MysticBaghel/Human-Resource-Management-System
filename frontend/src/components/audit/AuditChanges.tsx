@@ -48,13 +48,18 @@ function readChanges(changes: Record<string, unknown>): {
     };
   }
   if (isRecord(changes.after)) {
-    return {
-      mode: "after",
-      rows: Object.entries(changes.after).map(([field, value]) => ({
-        field,
-        after: value,
-      })),
-    };
+    const rows: ChangeRow[] = Object.entries(changes.after).map(
+      ([field, value]) => ({ field, after: value }),
+    );
+    // A create event can carry related rows (invoice line items) beside the
+    // main snapshot; show them rather than silently dropping the extra keys.
+    for (const [field, value] of Object.entries(changes)) {
+      if (field === "after" || field === "before" || field === "changes") {
+        continue;
+      }
+      rows.push({ field, after: value });
+    }
+    return { mode: "after", rows };
   }
   if (isRecord(changes.before)) {
     return {

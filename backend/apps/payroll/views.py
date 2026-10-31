@@ -9,6 +9,7 @@ from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.negotiation import BinaryContentNegotiation
 from apps.core.permissions import (
     IsHROrAdmin,
     PayrollRecordPermission,
@@ -312,7 +313,12 @@ class PayrollRecordViewSet(
         )
         return Response(PayrollRecordSerializer(record).data)
 
-    @action(detail=True, methods=["get"], url_path="payslip")
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="payslip",
+        content_negotiation_class=BinaryContentNegotiation,
+    )
     def payslip(self, request, pk=None):
         """Download the authenticated employee's (or HR's) PDF payslip."""
         record = self.get_object()

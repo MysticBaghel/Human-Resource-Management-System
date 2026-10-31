@@ -19,3 +19,10 @@ DATABASES = {
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+# Tests exercise the fallback path unless a test explicitly configures Gmail.
+INVOICE_EMAIL_FALLBACK = True
+GMAIL_CLIENT_ID = ""
+GMAIL_CLIENT_SECRET = ""
+GMAIL_REFRESH_TOKEN = ""
+GMAIL_SENDER_EMAIL = ""
