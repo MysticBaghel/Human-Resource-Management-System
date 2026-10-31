@@ -31,6 +31,26 @@ def post(client, path, data):
 
 
 class TestLogin:
+    def test_me_exposes_the_employee_full_name(
+        self, auth_client, api_client, demo_org
+    ):
+        auth_client(demo_org.employee_user)
+
+        response = api_client.get(ME_URL)
+
+        assert response.status_code == 200
+        assert response.data["full_name"] == "Esha Employee"
+        assert response.data["email"] == demo_org.employee_user.email
+
+    def test_me_falls_back_to_email_without_an_employee_record(
+        self, auth_client, api_client, hr_user
+    ):
+        auth_client(hr_user)
+
+        response = api_client.get(ME_URL)
+
+        assert response.data["full_name"] == hr_user.email
+
     def test_login_succeeds_with_valid_credentials(self, api_client, employee_user):
         response = post(
             api_client,

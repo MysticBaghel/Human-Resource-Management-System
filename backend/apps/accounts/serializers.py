@@ -11,12 +11,25 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """The shape of a user everywhere in the API."""
+    """The shape of a user everywhere in the API.
+
+    ``full_name`` is the person's employee name when an employee record exists.
+    The custom user model has no name columns, so this is the only place the
+    signed-in person's displayed name comes from.
+    """
+
+    full_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "email", "role", "is_active", "date_joined"]
+        fields = ["id", "email", "full_name", "role", "is_active", "date_joined"]
         read_only_fields = fields
+
+    def get_full_name(self, obj) -> str:
+        employee = getattr(obj, "employee", None)
+        if employee is not None:
+            return employee.full_name
+        return obj.email
 
 
 class LoginSerializer(serializers.Serializer):

@@ -131,7 +131,7 @@ export function DashboardPage() {
 
   const metrics = data.metrics;
   const number = (key: string) => metrics[key] ?? 0;
-  const name = user.email.split("@")[0];
+  const name = user.full_name || user.email.split("@")[0];
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">

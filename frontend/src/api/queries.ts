@@ -11,6 +11,7 @@ export type Role = "admin" | "hr" | "manager" | "employee";
 export type User = {
   id: number;
   email: string;
+  full_name: string;
   role: Role;
   is_active: boolean;
   date_joined: string;

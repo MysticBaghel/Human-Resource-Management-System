@@ -12,6 +12,7 @@ venv/
 .ruff_cache/
 *.sqlite3
 db.sqlite3
+*.tsbuildinfo
 
 # Uploaded organisation logos and other media
 media/
@@ -29,4 +30,4 @@ Thumbs.db
 
 # Local tooling leftovers
 .tmp/
-docs/
+pdf/

@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
+import { initials } from "@/lib/format";
 
 export function UserMenu() {
   const { user, logout } = useAuth();
@@ -23,7 +24,8 @@ export function UserMenu() {
 
   if (user === null) return null;
 
-  const initial = user.email.charAt(0).toUpperCase();
+  const displayName = user.full_name || user.email.split("@")[0];
+  const initial = initials(displayName) || user.email.charAt(0).toUpperCase();
 
   async function handleLogout() {
     setIsSigningOut(true);
@@ -51,13 +53,16 @@ export function UserMenu() {
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
           {initial}
         </span>
-        <span className="hidden max-w-[12rem] truncate sm:inline">{user.email}</span>
+        <span className="hidden max-w-[12rem] truncate sm:inline">{displayName}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden="true" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="font-normal">
-          <span className="block truncate text-sm font-medium">{user.email}</span>
+          <span className="block truncate text-sm font-medium">{displayName}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {user.email}
+          </span>
           <span className="mt-0.5 block text-xs capitalize text-muted-foreground">
             {ROLE_LABELS[user.role]}
           </span>
