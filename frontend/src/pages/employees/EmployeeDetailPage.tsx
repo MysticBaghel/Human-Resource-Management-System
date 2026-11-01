@@ -22,14 +22,15 @@ import {
 } from "@/api/employees";
 import { ROLE_LABELS } from "@/api/queries";
 import { useAuth } from "@/auth/AuthContext";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { ErrorState } from "@/components/common/states";
 import { StatusBadge } from "@/components/employees/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { formatDate, initials } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
 
 function Detail({
   icon: Icon,
@@ -102,9 +103,7 @@ export function EmployeeDetailPage() {
           message={
             notFound
               ? "They may have been deleted, or they are outside your team."
-              : error instanceof Error
-                ? error.message
-                : undefined
+              : errorMessage(error)
           }
           onRetry={notFound ? undefined : () => void refetch()}
         />
@@ -241,36 +240,20 @@ export function EmployeeDetailPage() {
         </CardContent>
       </Card>
 
-      <Dialog
+      <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Deactivate ${employee.full_name}?`}
         description="They lose access immediately. Their record and history are kept, and you can reactivate them later."
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDeactivate}
-              disabled={statusMutation.isPending}
-            >
-              {statusMutation.isPending ? "Deactivating…" : "Deactivate"}
-            </Button>
-          </>
-        }
+        cancelLabel="Cancel"
+        confirmLabel="Deactivate"
+        pendingLabel="Deactivating…"
+        isPending={statusMutation.isPending}
+        onConfirm={handleDeactivate}
       >
-        <p className="text-sm text-muted-foreground">
-          Deactivating is not deleting: the person stays in the audit trail and
-          the employee list, and their leave history is untouched.
-        </p>
-      </Dialog>
+        Deactivating is not deleting: the person stays in the audit trail and
+        the employee list, and their leave history is untouched.
+      </ConfirmDialog>
     </div>
   );
 }

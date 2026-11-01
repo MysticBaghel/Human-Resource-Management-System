@@ -49,7 +49,7 @@ Honest inventory of what has and has not been checked.
   the counts stable and deletes nothing.
 - `python manage.py showmigrations payroll organization` — payroll `0001`,
   organization `0001` and `0002` are applied on the local PostgreSQL database.
-- `pytest` — **407 passed, 2 skipped** on SQLite.
+- `pytest` — **416 passed, 2 skipped** on SQLite.
   - 51 invoice tests cover client CRUD and permissions, exact totals, number
     sequencing, client snapshots, draft editing, sent locks, cancellation,
     partial/full payments, overpayment refusal, invoice sending with PDF
@@ -57,9 +57,10 @@ Honest inventory of what has and has not been checked.
     unconfigured, reminder emails/cooldown/queue/dashboard, the scheduled
     command, uploads (type, size, download, delete), PDFs (including
     `Accept: application/pdf`), audit rows and role restrictions.
-  - 54 payroll tests cover calculations, permissions, revisions, generation,
-    duplicates, adjustments, finalization, payment statuses, ownership
-    restrictions, PDF generation, the dashboard and audit rows.
+  - 62 payroll tests cover calculations, permissions, revisions, revocation,
+    generation, duplicates, adjustments, draft cancellation, finalization,
+    payment statuses (including cancelled), ownership restrictions, PDF
+    generation, the dashboard and audit rows.
   - The two skips are the Postgres-only exclusion constraint tests.
 - `ruff check --select E,F` on the changed invoice/audit/backend files — clean
   (generated migrations excluded).

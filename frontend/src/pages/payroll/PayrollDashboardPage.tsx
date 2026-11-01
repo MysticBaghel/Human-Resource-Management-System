@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatMoney, formatPayPeriod } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
 
 function PageSkeleton() {
   return (
@@ -61,7 +62,7 @@ export function PayrollDashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Payroll</h1>
         <ErrorState
           title="Could not load the payroll dashboard"
-          message={error instanceof Error ? error.message : undefined}
+          message={errorMessage(error)}
           onRetry={() => void refetch()}
         />
       </div>

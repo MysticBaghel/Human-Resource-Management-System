@@ -107,6 +107,18 @@ class LeaveBalanceViewSet(viewsets.ReadOnlyModelViewSet):
                     {"employee": ["Enter a whole number."]}
                 ) from exc
             queryset = queryset.filter(employee_id=employee_id)
+            return queryset
+
+        # Balances are personal by default. HR/admin still need the company-wide
+        # view for nothing in this UI, so it must be requested explicitly with
+        # `mine=false`; the personal "My time off" page never asks for it. This
+        # keeps a stale frontend from rendering everyone's cards by accident.
+        mine = params.get("mine")
+        normalized = "true" if mine is None else mine.lower()
+        if normalized in {"true", "1"}:
+            queryset = queryset.filter(employee__user=self.request.user)
+        elif normalized not in {"false", "0"}:
+            raise ValidationError({"mine": ["Use true or false."]})
         return queryset
 
 

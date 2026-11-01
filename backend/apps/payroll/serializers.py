@@ -80,6 +80,7 @@ class SalaryStructureSerializer(serializers.ModelSerializer):
             "net_salary",
             "effective_date",
             "is_active",
+            "revoked_at",
             "created_by",
             "created_by_email",
             "created_at",

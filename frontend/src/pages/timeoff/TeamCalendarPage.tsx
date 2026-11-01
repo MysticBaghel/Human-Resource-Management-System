@@ -1,7 +1,7 @@
 /** Team calendar: one month of approved leave, scoped by the API. */
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   type CalendarLeave,
@@ -24,6 +24,7 @@ import {
   toIsoDate,
 } from "@/lib/date";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -39,18 +40,29 @@ export function TeamCalendarPage() {
     cursor.month,
   );
   const { data: typesData } = useLeaveTypes();
-  const weeks = monthGrid(cursor.year, cursor.month);
+  const weeks = useMemo(
+    () => monthGrid(cursor.year, cursor.month),
+    [cursor.year, cursor.month],
+  );
 
-  const byDay = new Map<string, CalendarLeave[]>();
-  for (const entry of data?.results ?? []) {
-    for (const day of eachDate(entry.start_date, entry.end_date)) {
-      const list = byDay.get(day) ?? [];
-      list.push(entry);
-      byDay.set(day, list);
+  const byDay = useMemo(() => {
+    const map = new Map<string, CalendarLeave[]>();
+    for (const entry of data?.results ?? []) {
+      for (const day of eachDate(entry.start_date, entry.end_date)) {
+        const list = map.get(day) ?? [];
+        list.push(entry);
+        map.set(day, list);
+      }
     }
-  }
-  const holidayByDay = new Map(
-    (data?.holidays ?? []).map((holiday) => [holiday.date, holiday.name]),
+    return map;
+  }, [data?.results]);
+
+  const holidayByDay = useMemo(
+    () =>
+      new Map(
+        (data?.holidays ?? []).map((holiday) => [holiday.date, holiday.name]),
+      ),
+    [data?.holidays],
   );
 
   function goToToday() {
@@ -105,7 +117,7 @@ export function TeamCalendarPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load the calendar"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : (

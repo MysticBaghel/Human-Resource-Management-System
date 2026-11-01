@@ -44,7 +44,7 @@ All errors use one shape:
 | DELETE | `/teams/{id}/` | hr, admin | delete a team (people keep their record) |
 | GET | `/leave-types/` | session | every leave type |
 | POST / PATCH / DELETE | `/leave-types/{id}/` | hr, admin | manage types (in-use types cannot be deleted) |
-| GET | `/leave-balances/` | session, scoped | balances; `year` and `employee` (HR/admin) filters |
+| GET | `/leave-balances/` | session, scoped | balances; own by default, `mine=false` for the HR/admin company view, plus `year`/`employee` |
 | GET | `/leave-requests/` | session, scoped | requests; `mine`, `status`, `leave_type`, `employee`, `year` filters |
 | POST | `/leave-requests/` | session | request leave for yourself |
 | POST | `/leave-requests/preview/` | session | days, remaining, sufficient and overlap for the dialog |
@@ -60,6 +60,7 @@ All errors use one shape:
 | POST | `/payroll/salary-structures/` | hr, admin | create an employee's first structure |
 | GET | `/payroll/salary-structures/{id}/` | session, scoped | one structure |
 | PATCH / PUT | `/payroll/salary-structures/{id}/` | hr, admin | revise; creates a new active version |
+| POST | `/payroll/salary-structures/{id}/revoke/` | hr, admin | retire the active structure; kept in history |
 | DELETE | `/payroll/salary-structures/{id}/` | — | 405; versions are kept |
 | GET | `/payroll/salary-revisions/` | hr, admin | revision history, filter by `employee` |
 | GET | `/payroll/records/` | session, scoped | payroll history; `mine`, `year`, `month`, `status`, `payment_status`, `employee`, `search` |
@@ -67,7 +68,8 @@ All errors use one shape:
 | POST | `/payroll/records/generate/` | hr, admin | generate drafts for one employee or all eligible |
 | POST | `/payroll/records/{id}/finalize/` | hr, admin | freeze one draft |
 | POST | `/payroll/records/finalize-period/` | hr, admin | freeze every draft in a month |
-| POST | `/payroll/records/{id}/payment/` | hr, admin | record `pending`/`paid`/`failed`, date and reference |
+| POST | `/payroll/records/{id}/cancel/` | hr, admin | delete a draft (204) or mark a finalized record's payment `cancelled` |
+| POST | `/payroll/records/{id}/payment/` | hr, admin | record `pending`/`paid`/`failed`/`cancelled`, date and reference |
 | GET | `/payroll/records/{id}/payslip/` | owner or hr/admin | PDF payslip for a finalized record (HR can preview drafts) |
 | GET | `/invoices/dashboard/` | hr, admin | receivable metrics and recent invoices |
 | GET / POST | `/clients/` | hr, admin | list/search clients, or add one |

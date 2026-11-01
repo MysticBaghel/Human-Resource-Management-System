@@ -140,10 +140,12 @@ class TestBalances:
         assert annual["allocated"] == 20.0
         assert annual["remaining"] == 20.0
 
-    def test_hr_sees_every_balance(self, auth_client, api_client, leave_org):
+    def test_hr_can_explicitly_request_every_balance(
+        self, auth_client, api_client, leave_org
+    ):
         auth_client(leave_org.org.hr)
 
-        response = api_client.get(BALANCES)
+        response = api_client.get(f"{BALANCES}?mine=false")
 
         assert response.data["count"] == 9
 
@@ -194,6 +196,30 @@ class TestBalances:
         assert {row["employee"] for row in response.data["results"]} == {
             leave_org.org.esha.pk
         }
+
+    def test_hr_mine_filter_narrows_balances_to_their_own(
+        self,
+        auth_client,
+        api_client,
+        leave_org,
+        make_employee,
+        make_balance,
+    ):
+        hr_employee = make_employee(
+            user=leave_org.org.hr, first_name="Hana", last_name="HR"
+        )
+        make_balance(hr_employee, leave_org.types.annual, allocated="20")
+        auth_client(leave_org.org.hr)
+
+        everyone = api_client.get(f"{BALANCES}?mine=false")
+        default = api_client.get(BALANCES)
+        mine = api_client.get(f"{BALANCES}?mine=true")
+
+        assert everyone.data["count"] == 10
+        assert default.data["count"] == 1
+        assert default.data["results"][0]["employee"] == hr_employee.pk
+        assert mine.data["count"] == 1
+        assert mine.data["results"][0]["employee"] == hr_employee.pk
 
     def test_an_employee_cannot_peek_through_the_employee_filter(
         self, auth_client, api_client, leave_org

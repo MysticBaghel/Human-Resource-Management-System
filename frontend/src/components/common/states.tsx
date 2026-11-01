@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type ErrorStateProps = {
   title?: string;
@@ -49,6 +50,40 @@ export function EmptyState({ title, description, action }: EmptyStateProps) {
         <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
       ) : null}
       {action}
+    </div>
+  );
+}
+
+type SkeletonRowsProps = {
+  count: number;
+  height: string;
+  label: string;
+};
+
+/** Placeholder rows shown while a list loads. */
+export function SkeletonRows({ count, height, label }: SkeletonRowsProps) {
+  return (
+    <div className="space-y-2" aria-busy="true" aria-live="polite">
+      {Array.from({ length: count }).map((_, index) => (
+        <Skeleton key={index} className={`${height} w-full`} />
+      ))}
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
+/** Shown while the session resolves or a route chunk loads. */
+export function FullPageSpinner() {
+  return (
+    <div
+      className="flex min-h-screen items-center justify-center bg-muted"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
+        <p className="text-sm text-muted-foreground">Loading HRMS…</p>
+      </div>
     </div>
   );
 }

@@ -48,6 +48,12 @@ person.
 - A half day costs 0.5 and must be a single date.
 - A request cannot span two calendar years.
 - Requests store start/end dates, the leave type, a reason, status and reviewer.
+- Everyone can request leave for themselves. HR/admin manage other people's
+  leave from the **Leaves** directory and use its **My time off** button to open
+  their own personal page.
+- The balances API is personal by default: HR/admin must pass `mine=false` to
+  read the company-wide list, so the personal page can never render everyone's
+  cards by mistake.
 
 ### Overlaps
 

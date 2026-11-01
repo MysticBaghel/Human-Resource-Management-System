@@ -1,15 +1,12 @@
-/** Small formatting helpers shared by the people pages. */
+/** Small formatting helpers shared across pages. */
+
+import { formatLongDate, MONTH_NAMES, parseIsoDate } from "@/lib/date";
 
 /** "2024-05-06" -> "6 May 2024", without timezone drift. */
 export function formatDate(isoDate: string): string {
   if (!isoDate) return "—";
-  const date = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return isoDate;
-  return date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  if (Number.isNaN(parseIsoDate(isoDate).getTime())) return isoDate;
+  return formatLongDate(isoDate);
 }
 
 export function initials(fullName: string): string {
@@ -55,19 +52,5 @@ export function formatMoney(value: number | string | null | undefined): string {
 
 /** 10, 2026 -> "October 2026". */
 export function formatPayPeriod(month: number, year: number): string {
-  const names = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-  return `${names[month - 1] ?? month} ${year}`;
+  return `${MONTH_NAMES[month - 1] ?? month} ${year}`;
 }

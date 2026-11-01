@@ -1,25 +1,19 @@
 /** Admin/HR time-off directory: employee names only, each linking to their page. */
 
-import { ChevronRight, Search } from "lucide-react";
+import { CalendarDays, ChevronRight, Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useEmployees } from "@/api/employees";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { errorMessage } from "@/lib/errors";
 
 function DirectorySkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <Skeleton key={index} className="h-10 w-full" />
-      ))}
-      <span className="sr-only">Loading employees…</span>
-    </div>
-  );
+  return <SkeletonRows count={5} height="h-10" label="Loading employees…" />;
 }
 
 export function LeaveDirectory() {
@@ -34,11 +28,19 @@ export function LeaveDirectory() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">My time off</h1>
-        <p className="text-sm text-muted-foreground">
-          Choose a person to see their leave balances and requests.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Leaves</h1>
+          <p className="text-sm text-muted-foreground">
+            Choose a person to see their leave balances and requests.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/time-off/me">
+            <CalendarDays className="h-4 w-4" aria-hidden="true" />
+            My time off
+          </Link>
+        </Button>
       </div>
 
       <Card>
@@ -63,7 +65,7 @@ export function LeaveDirectory() {
           ) : isError ? (
             <ErrorState
               title="Could not load employees"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : employees.length === 0 ? (

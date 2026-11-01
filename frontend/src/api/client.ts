@@ -34,6 +34,32 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
+type ErrorPayload = {
+  detail?: string;
+  code?: string;
+  fields?: Record<string, string[]>;
+};
+
+/** Read a JSON body (tolerating empty/invalid bodies); throw ApiError when not ok. */
+async function parseResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  const text = await response.text();
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const data = (payload ?? {}) as ErrorPayload;
+    throw new ApiError(data.detail ?? fallbackMessage, response.status, data.code, data.fields);
+  }
+
+  return payload as T;
+}
+
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
@@ -64,31 +90,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     return undefined as T;
   }
 
-  const text = await response.text();
-  let payload: unknown = null;
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = null;
-    }
-  }
-
-  if (!response.ok) {
-    const data = (payload ?? {}) as {
-      detail?: string;
-      code?: string;
-      fields?: Record<string, string[]>;
-    };
-    throw new ApiError(
-      data.detail ?? `Request failed with status ${response.status}.`,
-      response.status,
-      data.code,
-      data.fields,
-    );
-  }
-
-  return payload as T;
+  return parseResponse<T>(response, `Request failed with status ${response.status}.`);
 }
 
 export function apiGet<T>(path: string): Promise<T> {
@@ -122,31 +124,7 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
     body: formData,
   });
 
-  const text = await response.text();
-  let payload: unknown = null;
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = null;
-    }
-  }
-
-  if (!response.ok) {
-    const data = (payload ?? {}) as {
-      detail?: string;
-      code?: string;
-      fields?: Record<string, string[]>;
-    };
-    throw new ApiError(
-      data.detail ?? `Upload failed with status ${response.status}.`,
-      response.status,
-      data.code,
-      data.fields,
-    );
-  }
-
-  return payload as T;
+  return parseResponse<T>(response, `Upload failed with status ${response.status}.`);
 }
 
 /** Download a file (PDF payslips, invoice PDFs, uploaded files) with the session cookie. */
@@ -162,21 +140,7 @@ export async function apiDownload(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    let payload: { detail?: string; code?: string; fields?: Record<string, string[]> } = {};
-    if (text) {
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        payload = {};
-      }
-    }
-    throw new ApiError(
-      payload.detail ?? `Download failed with status ${response.status}.`,
-      response.status,
-      payload.code,
-      payload.fields,
-    );
+    await parseResponse(response, `Download failed with status ${response.status}.`);
   }
 
   const blob = await response.blob();

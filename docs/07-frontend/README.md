@@ -34,7 +34,7 @@ frontend checks.
 | Dashboard | Role-aware dashboard |
 | Employees | List, detail, create/edit |
 | Teams | Team list and management |
-| Time off | My time off, approvals, team calendar, employee time-off view |
+| Time off | Leaves (HR/admin directory), My time off, approvals, team calendar, employee time-off view |
 | Audit | Audit log (HR/admin) |
 | Payroll | Payroll dashboard, salary structures, monthly payroll, my payslips |
 | Invoices | Invoice ledger, client directory, invoice detail (HR/admin) |
@@ -47,8 +47,10 @@ permissions are.
 
 - The dashboard is computed per role and never shows company-wide fields to an
   employee payload.
-- My time off limits employees/managers to their own balances and requests; HR
-  and admin get an employee-name directory.
+- Employees and managers get **My time off** with their own balances and
+  requests. HR/admin get **Leaves**, an employee directory, plus a **My time
+  off** button in its header that opens their own personal leave page
+  (`/time-off/me`) where they can request leave.
 - HR/admin see every leave request on Approvals; managers get their pending
   queue.
 - The request dialog calls the API for a live working-day and balance preview.
@@ -57,10 +59,12 @@ permissions are.
   detail dialog with before/after changes.
 - Payroll dashboard shows structures, current-month totals, paid/pending
   amounts, draft/finalized counts, failed payments and recent activity.
-- Salary structures supports create/revise dialogs with a live total preview and
-  revision history.
+- Salary structures supports create/revise dialogs with a live total preview,
+  revision history and a `Revoke` action in the revise modal.
 - Monthly payroll supports month/year selection, generate one/all, filters,
-  draft adjustment, finalization, bulk finalize, payment status and PDF download.
+  draft adjustment (including cancelling/deleting the draft), finalization, bulk
+  finalize, payment status (including `Cancelled` below `Failed`) and PDF
+  download.
 - My payslips shows the employee's own structure, finalized history, payment
   status and PDF downloads.
 - Invoices includes receivable metrics, a reminder queue, filters and a

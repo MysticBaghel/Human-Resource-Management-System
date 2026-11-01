@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
   useAdjustPayroll,
+  useCancelPayroll,
   type PayrollRecord,
 } from "@/api/payroll";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { FormError } from "@/components/form/FieldError";
 import { SalaryBreakdown } from "@/components/payroll/SalaryBreakdown";
 import { Button } from "@/components/ui/button";
@@ -28,9 +30,11 @@ export function PayrollAdjustmentDialog({
   record,
 }: PayrollAdjustmentDialogProps) {
   const mutation = useAdjustPayroll();
+  const cancelMutation = useCancelPayroll();
   const [amount, setAmount] = useState("0");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !record) return;
@@ -46,6 +50,25 @@ export function PayrollAdjustmentDialog({
   const effectiveAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
   const previewNet =
     payroll.gross_salary + effectiveAmount - payroll.total_deductions;
+
+  async function handleCancelPayroll() {
+    setError(null);
+    try {
+      await cancelMutation.mutateAsync(payroll.id);
+      toast({
+        title: "Draft payroll cancelled",
+        description: `${payroll.employee_name} · ${payroll.pay_period}. You can generate it again.`,
+        variant: "success",
+      });
+      setCancelOpen(false);
+      onOpenChange(false);
+    } catch (caught) {
+      setCancelOpen(false);
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not cancel the payroll.",
+      );
+    }
+  }
 
   async function handleSave() {
     if (!Number.isFinite(parsedAmount)) {
@@ -77,63 +100,91 @@ export function PayrollAdjustmentDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={`Adjust ${payroll.employee_name}'s payroll`}
-      description={`${payroll.pay_period} · ${payroll.payslip_number}`}
-      className="sm:max-w-2xl"
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={mutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleSave} disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving…" : "Save adjustment"}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <FormError message={error ?? undefined} />
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={`Adjust ${payroll.employee_name}'s payroll`}
+        description={`${payroll.pay_period} · ${payroll.payslip_number}`}
+        className="sm:max-w-2xl"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="destructive"
+              className="sm:mr-auto"
+              onClick={() => setCancelOpen(true)}
+              disabled={mutation.isPending || cancelMutation.isPending}
+            >
+              Cancel payroll
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={mutation.isPending}
+            >
+              Close
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving…" : "Save adjustment"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <FormError message={error ?? undefined} />
 
-        <SalaryBreakdown
-          values={{
-            ...payroll,
-            adjustment_amount: effectiveAmount,
-            adjustment_note: note,
-          }}
-        />
+          <SalaryBreakdown
+            values={{
+              ...payroll,
+              adjustment_amount: effectiveAmount,
+              adjustment_note: note,
+            }}
+          />
 
-        <Field
-          id="adjustment-amount"
-          label="Adjustment amount"
-          hint="Positive adds to net pay; negative deducts. Use 0 to clear."
-        >
-          <Input
+          <Field
             id="adjustment-amount"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-          />
-        </Field>
-        <Field id="adjustment-note" label="Reason" hint="Optional, shown on the record.">
-          <Input
-            id="adjustment-note"
-            value={note}
-            maxLength={255}
-            placeholder="Bonus, correction, arrears…"
-            onChange={(event) => setNote(event.target.value)}
-          />
-        </Field>
-      </div>
-    </Dialog>
+            label="Adjustment amount"
+            hint="Positive adds to net pay; negative deducts. Use 0 to clear."
+          >
+            <Input
+              id="adjustment-amount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+          </Field>
+          <Field id="adjustment-note" label="Reason" hint="Optional, shown on the record.">
+            <Input
+              id="adjustment-note"
+              value={note}
+              maxLength={255}
+              placeholder="Bonus, correction, arrears…"
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </Field>
+        </div>
+      </Dialog>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setCancelOpen(false);
+        }}
+        title="Cancel this draft payroll?"
+        description={`${payroll.employee_name} · ${payroll.pay_period} · ${payroll.payslip_number}`}
+        cancelLabel="Keep draft"
+        confirmLabel="Cancel payroll"
+        pendingLabel="Cancelling…"
+        isPending={cancelMutation.isPending}
+        onConfirm={() => void handleCancelPayroll()}
+      >
+        The draft payroll record is deleted (no finalized payroll is affected),
+        so you can generate this employee&apos;s payroll for the period again.
+      </ConfirmDialog>
+    </>
   );
 }

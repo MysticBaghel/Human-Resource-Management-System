@@ -81,7 +81,7 @@ Read the pages in order:
 
 ## Verification
 
-Current local checks: **407 backend tests passed, 2 skipped**, `tsc --noEmit`
+Current local checks: **416 backend tests passed, 2 skipped**, `tsc --noEmit`
 clean, and a production frontend build succeeds. See
 [docs/08-testing/README.md](docs/08-testing/README.md) for exactly what was and
 was not exercised, including the Gmail and PostgreSQL caveats.

@@ -16,6 +16,12 @@ export function PayrollStatusBadge({ status }: { status: PayrollStatus }) {
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   const variant =
-    status === "paid" ? "success" : status === "failed" ? "destructive" : "outline";
+    status === "paid"
+      ? "success"
+      : status === "failed"
+        ? "destructive"
+        : status === "cancelled"
+          ? "secondary"
+          : "outline";
   return <Badge variant={variant}>{PAYMENT_STATUS_LABELS[status]}</Badge>;
 }

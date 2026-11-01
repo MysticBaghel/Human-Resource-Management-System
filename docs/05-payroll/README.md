@@ -35,6 +35,9 @@ constraint on `(employee, year, month)` prevents duplicates.
 ## Draft and finalized
 
 - Adjustments (positive or negative, with a note) are allowed only on drafts.
+- A draft can be **cancelled** from the Adjust dialog. That deletes the draft row
+  (no finalized payroll is touched), so the employee/period can be generated
+  again.
 - Finalizing locks the snapshot, records who finalized it and when, and cannot be
   undone.
 - Later structure revisions never touch existing payroll records, draft or
@@ -43,8 +46,26 @@ constraint on `(employee, year, month)` prevents duplicates.
 
 ## Payments
 
-Statuses are `pending`, `paid` and `failed`. HR/admin can record a payment date
-and reference. No bank transfer or gateway call is made.
+Statuses are `pending`, `paid`, `failed` and `cancelled`. HR/admin can record a
+payment date and reference; cancelling a finalized payroll clears the payment
+date but keeps the row and payslip snapshot for audit. No bank transfer or
+gateway call is made.
+
+## Revoking a salary structure
+
+The active structure can be **revoked** from the revise dialog (the `Revoke`
+button next to Cancel/Save revision). Revoking:
+
+- deactivates the structure (it disappears from the active list, so a replacement
+  can be created);
+- stamps `revoked_at` and keeps the row in revision history;
+- leaves all existing payroll snapshots untouched;
+- makes payroll periods after the revocation date skip the employee until a new
+  structure exists. Periods ending before the revocation still resolve to the
+  old structure, so historical/arrears runs keep working.
+
+The generic `DELETE` method is still refused: structures are retired, not
+erased.
 
 ## Payslips
 
@@ -83,8 +104,10 @@ written to media storage.
 - HR/admin manage salary structures and payroll records.
 - Employees and managers can read only their own active structure and finalized
   payroll records.
-- Salary versions are never deleted.
-- Payroll records are never deleted.
+- Salary structures are never hard-deleted; `Revoke` deactivates the active
+  version and keeps it in history.
+- Draft payroll records can be cancelled (deleted) before finalization; finalized
+  payroll records are never deleted and use the `cancelled` payment status.
 - Every payroll state change is audited.
 
 ## Tests

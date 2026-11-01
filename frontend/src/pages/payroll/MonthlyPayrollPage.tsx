@@ -2,15 +2,13 @@
 
 import {
   Check,
-  Download,
   Plus,
   ReceiptText,
   Search,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { ApiError } from "@/api/client";
 import { useEmployees } from "@/api/employees";
 import {
   MONTH_NAMES,
@@ -25,40 +23,25 @@ import {
   type PayrollStatus,
 } from "@/api/payroll";
 import { Pagination } from "@/components/common/Pagination";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
+import { PayrollRecordsList } from "@/components/payroll/PayrollRecordsList";
 import { GeneratePayrollDialog } from "@/components/payroll/GeneratePayrollDialog";
 import { PaymentStatusDialog } from "@/components/payroll/PaymentStatusDialog";
 import { PayrollAdjustmentDialog } from "@/components/payroll/PayrollAdjustmentDialog";
-import { PaymentStatusBadge, PayrollStatusBadge } from "@/components/payroll/StatusBadges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { toast } from "@/components/ui/toast";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { formatDate, formatMoney, formatPayPeriod } from "@/lib/format";
-
-const PAGE_SIZE = 20;
+import { formatPayPeriod } from "@/lib/format";
+import { errorMessage, showError } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
+import { usePage } from "@/lib/usePage";
 
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className="h-16 w-full" />
-      ))}
-      <span className="sr-only">Loading payroll records…</span>
-    </div>
-  );
+  return <SkeletonRows count={6} height="h-16" label="Loading payroll records…" />;
 }
 
 function yearOptions(selected: number): number[] {
@@ -77,7 +60,6 @@ export function MonthlyPayrollPage() {
   const [status, setStatus] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [adjustRecord, setAdjustRecord] = useState<PayrollRecord | null>(null);
   const [paymentRecord, setPaymentRecord] = useState<PayrollRecord | null>(null);
@@ -91,9 +73,7 @@ export function MonthlyPayrollPage() {
   const finalizeMutation = useFinalizePayroll();
   const finalizePeriodMutation = useFinalizePayrollPeriod();
 
-  useEffect(() => {
-    setPage(1);
-  }, [month, year, status, paymentStatus, debouncedSearch]);
+  const [page, setPage] = usePage(JSON.stringify([month, year, status, paymentStatus, debouncedSearch]));
 
   const { data, isLoading, isError, error, refetch } = usePayrollRecords({
     month,
@@ -109,15 +89,6 @@ export function MonthlyPayrollPage() {
   const hasFilters = Boolean(status || paymentStatus || debouncedSearch);
   const isFinalizing =
     finalizeMutation.isPending || finalizePeriodMutation.isPending;
-
-  function showError(title: string, caught: unknown) {
-    toast({
-      title,
-      description:
-        caught instanceof ApiError ? caught.message : "Please try again.",
-      variant: "destructive",
-    });
-  }
 
   async function handleFinalize() {
     if (finalizeTarget === null) return;
@@ -266,7 +237,7 @@ export function MonthlyPayrollPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load payroll records"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : rows.length === 0 ? (
@@ -300,187 +271,14 @@ export function MonthlyPayrollPage() {
             />
           ) : (
             <>
-              <div className="hidden lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead className="text-right">Gross</TableHead>
-                      <TableHead className="text-right">Deductions</TableHead>
-                      <TableHead className="text-right">Net</TableHead>
-                      <TableHead>Payroll</TableHead>
-                      <TableHead>Payment</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((record) => (
-                      <TableRow key={record.id} className="align-top">
-                        <TableCell>
-                          <p className="font-medium">{record.employee_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {record.employee_code} · {record.payslip_number}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(record.gross_salary)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(record.total_deductions)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          {formatMoney(record.net_salary)}
-                          {record.adjustment_amount !== 0 ? (
-                            <p className="text-xs font-normal text-muted-foreground">
-                              incl. {formatMoney(record.adjustment_amount)} adjustment
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <PayrollStatusBadge status={record.status} />
-                          {record.finalized_at ? (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {formatDate(record.finalized_at.slice(0, 10))}
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <PaymentStatusBadge status={record.payment_status} />
-                          {record.payment_date ? (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {formatDate(record.payment_date)}
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap justify-end gap-1">
-                            {record.status === "draft" ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setAdjustRecord(record)}
-                                >
-                                  Adjust
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={() => setFinalizeTarget(record)}
-                                >
-                                  Finalize
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setPaymentRecord(record)}
-                                >
-                                  Payment
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => void handleDownload(record)}
-                                  disabled={downloadingId === record.id}
-                                >
-                                  <Download className="h-4 w-4" aria-hidden="true" />
-                                  {downloadingId === record.id ? "…" : "Payslip"}
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <ul className="space-y-3 lg:hidden">
-                {rows.map((record) => (
-                  <li key={record.id} className="space-y-3 rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {record.employee_name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {record.employee_code} · {record.payslip_number}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-sm font-semibold tabular-nums">
-                        {formatMoney(record.net_salary)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <PayrollStatusBadge status={record.status} />
-                      <PaymentStatusBadge status={record.payment_status} />
-                      <span className="text-xs text-muted-foreground">
-                        Gross {formatMoney(record.gross_salary)} · deductions{" "}
-                        {formatMoney(record.total_deductions)}
-                      </span>
-                    </div>
-                    {record.adjustment_amount !== 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Adjustment {formatMoney(record.adjustment_amount)}
-                        {record.adjustment_note ? ` · ${record.adjustment_note}` : ""}
-                      </p>
-                    ) : null}
-                    <div className="flex gap-2">
-                      {record.status === "draft" ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => setAdjustRecord(record)}
-                          >
-                            Adjust
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => setFinalizeTarget(record)}
-                          >
-                            Finalize
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => setPaymentRecord(record)}
-                          >
-                            Payment
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => void handleDownload(record)}
-                            disabled={downloadingId === record.id}
-                          >
-                            <Download className="h-4 w-4" aria-hidden="true" />
-                            {downloadingId === record.id ? "…" : "Payslip"}
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <PayrollRecordsList
+                rows={rows}
+                downloadingId={downloadingId}
+                onAdjust={setAdjustRecord}
+                onFinalize={setFinalizeTarget}
+                onPayment={setPaymentRecord}
+                onDownload={(record) => void handleDownload(record)}
+              />
 
               <Pagination
                 page={data?.page ?? page}

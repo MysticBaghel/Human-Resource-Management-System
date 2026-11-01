@@ -29,6 +29,8 @@ import type { Role } from "@/api/queries";
 
 export type NavItem = {
   label: string;
+  /** Optional role-specific label (HR/admin see "Leaves" instead). */
+  labelFor?: Partial<Record<Role, string>>;
   path: string;
   icon: LucideIcon;
   /** Roles that may see this item. */
@@ -113,6 +115,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "My time off",
+    labelFor: { admin: "Leaves", hr: "Leaves" },
     path: "/time-off",
     icon: CalendarDays,
     allow: ALL_ROLES,

@@ -5,11 +5,12 @@
  */
 
 import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment } from "react";
 import { NavLink } from "react-router-dom";
 
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { visibleNavItems } from "./navItems";
 
@@ -28,17 +29,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { role } = useAuth();
   const items = visibleNavItems(role);
-  const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== "undefined" && window.innerWidth >= 768,
-  );
-
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 768px)");
-    const handleChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches);
-    setIsDesktop(query.matches);
-    query.addEventListener("change", handleChange);
-    return () => query.removeEventListener("change", handleChange);
-  }, []);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // The rail is only shown as an icon column on a wide screen, and the drawer
   // is only ever icon-free, so one flag drives the labels.
@@ -84,6 +75,8 @@ export function Sidebar({
       <nav aria-label="Main navigation" className="flex flex-1 flex-col gap-1">
         {items.map((item, index) => {
           const Icon = item.icon;
+          const label =
+            (role ? item.labelFor?.[role] : undefined) ?? item.label;
           const previous = items[index - 1];
           const startsSection = Boolean(
             item.section && item.section !== previous?.section,
@@ -96,7 +89,7 @@ export function Sidebar({
             <span
               key={item.path}
               aria-disabled="true"
-              title={`${item.label} — coming in a later phase`}
+              title={`${label} — coming in a later phase`}
               className={cn(
                 "flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/60",
                 iconsOnly && "justify-center px-2",
@@ -105,7 +98,7 @@ export function Sidebar({
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
               {!iconsOnly && (
                 <>
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{label}</span>
                   <span className="ml-auto text-[10px] uppercase tracking-wide opacity-70">
                     soon
                   </span>
@@ -131,10 +124,10 @@ export function Sidebar({
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )
               }
-              title={iconsOnly ? item.label : undefined}
+              title={iconsOnly ? label : undefined}
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {!iconsOnly && <span className="truncate">{item.label}</span>}
+              {!iconsOnly && <span className="truncate">{label}</span>}
             </NavLink>
           );
 

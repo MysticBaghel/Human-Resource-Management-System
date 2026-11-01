@@ -1,4 +1,6 @@
-/** Query-string helpers shared by the list hooks. */
+/** Query-string helpers and mutation helper shared by the API hooks. */
+
+import { useMutation } from "@tanstack/react-query";
 
 export type QueryParams = Record<
   string,
@@ -15,4 +17,20 @@ export function toQueryString(params: QueryParams): string {
 
   const query = search.toString();
   return query ? `?${query}` : "";
+}
+
+/** Default page size for every paginated list. */
+export const PAGE_SIZE = 20;
+
+/** A mutation that runs `invalidate` once it succeeds. */
+export function useInvalidatingMutation<TData, TVariables>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
+  invalidate: () => unknown,
+) {
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      void invalidate();
+    },
+  });
 }

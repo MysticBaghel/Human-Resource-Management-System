@@ -29,6 +29,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { errorMessage } from "@/lib/errors";
 
 function PageSkeleton() {
   return (
@@ -122,7 +123,7 @@ export function DashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <ErrorState
           title="Could not load your dashboard"
-          message={error instanceof Error ? error.message : undefined}
+          message={errorMessage(error)}
           onRetry={() => void refetch()}
         />
       </div>

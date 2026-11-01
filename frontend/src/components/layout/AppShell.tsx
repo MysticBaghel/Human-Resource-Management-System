@@ -1,13 +1,14 @@
 /** App shell: sidebar, top bar and the routed page area. */
 
 import { Menu } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useAuth } from "@/auth/AuthContext";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { ROLE_LABELS } from "@/api/queries";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sidebar } from "./Sidebar";
 
 export function AppShell() {
@@ -53,7 +54,16 @@ export function AppShell() {
         </header>
 
         <main className="min-w-0 flex-1 p-4 sm:p-6">
-          <Outlet />
+          <Suspense
+            fallback={
+              <div className="space-y-3" aria-busy="true">
+                <Skeleton className="h-8 w-56" />
+                <Skeleton className="h-64 w-full" />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

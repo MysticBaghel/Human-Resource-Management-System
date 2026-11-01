@@ -1,93 +1,95 @@
+import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute, RoleRoute } from "@/auth/guards";
 import { AppShell } from "@/components/layout/AppShell";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { NotFoundPage } from "@/pages/NotFoundPage";
-import { AcceptInvitePage } from "@/pages/auth/AcceptInvitePage";
-import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
-import { LoginPage } from "@/pages/auth/LoginPage";
-import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
-import { AuditLogPage } from "@/pages/audit/AuditLogPage";
-import { ClientsPage } from "@/pages/invoices/ClientsPage";
-import { InvoiceDetailPage } from "@/pages/invoices/InvoiceDetailPage";
-import { InvoicesPage } from "@/pages/invoices/InvoicesPage";
-import { EmployeeDetailPage } from "@/pages/employees/EmployeeDetailPage";
-import { EmployeeFormPage } from "@/pages/employees/EmployeeFormPage";
-import { EmployeesPage } from "@/pages/employees/EmployeesPage";
-import { MonthlyPayrollPage } from "@/pages/payroll/MonthlyPayrollPage";
-import { MyPayslipsPage } from "@/pages/payroll/MyPayslipsPage";
-import { PayrollDashboardPage } from "@/pages/payroll/PayrollDashboardPage";
-import { SalaryStructuresPage } from "@/pages/payroll/SalaryStructuresPage";
-import { TeamsPage } from "@/pages/teams/TeamsPage";
-import { ApprovalsPage } from "@/pages/timeoff/ApprovalsPage";
-import { EmployeeTimeOffPage } from "@/pages/timeoff/EmployeeTimeOffPage";
-import { MyTimeOffPage } from "@/pages/timeoff/MyTimeOffPage";
-import { TeamCalendarPage } from "@/pages/timeoff/TeamCalendarPage";
+import { FullPageSpinner } from "@/components/common/states";
+
+/** Pages are split per route so the first load only ships what it needs. */
+function page<T extends Record<string, React.ComponentType>>(
+  load: () => Promise<T>,
+  name: keyof T,
+) {
+  return lazy(async () => ({ default: (await load())[name] }));
+}
+
+const DashboardPage = page(() => import("@/pages/DashboardPage"), "DashboardPage");
+const NotFoundPage = page(() => import("@/pages/NotFoundPage"), "NotFoundPage");
+const AcceptInvitePage = page(() => import("@/pages/auth/AcceptInvitePage"), "AcceptInvitePage");
+const ForgotPasswordPage = page(() => import("@/pages/auth/ForgotPasswordPage"), "ForgotPasswordPage");
+const LoginPage = page(() => import("@/pages/auth/LoginPage"), "LoginPage");
+const ResetPasswordPage = page(() => import("@/pages/auth/ResetPasswordPage"), "ResetPasswordPage");
+const AuditLogPage = page(() => import("@/pages/audit/AuditLogPage"), "AuditLogPage");
+const ClientsPage = page(() => import("@/pages/invoices/ClientsPage"), "ClientsPage");
+const InvoiceDetailPage = page(() => import("@/pages/invoices/InvoiceDetailPage"), "InvoiceDetailPage");
+const InvoicesPage = page(() => import("@/pages/invoices/InvoicesPage"), "InvoicesPage");
+const EmployeeDetailPage = page(() => import("@/pages/employees/EmployeeDetailPage"), "EmployeeDetailPage");
+const EmployeeFormPage = page(() => import("@/pages/employees/EmployeeFormPage"), "EmployeeFormPage");
+const EmployeesPage = page(() => import("@/pages/employees/EmployeesPage"), "EmployeesPage");
+const MonthlyPayrollPage = page(() => import("@/pages/payroll/MonthlyPayrollPage"), "MonthlyPayrollPage");
+const MyPayslipsPage = page(() => import("@/pages/payroll/MyPayslipsPage"), "MyPayslipsPage");
+const PayrollDashboardPage = page(() => import("@/pages/payroll/PayrollDashboardPage"), "PayrollDashboardPage");
+const SalaryStructuresPage = page(() => import("@/pages/payroll/SalaryStructuresPage"), "SalaryStructuresPage");
+const TeamsPage = page(() => import("@/pages/teams/TeamsPage"), "TeamsPage");
+const ApprovalsPage = page(() => import("@/pages/timeoff/ApprovalsPage"), "ApprovalsPage");
+const EmployeeTimeOffPage = page(() => import("@/pages/timeoff/EmployeeTimeOffPage"), "EmployeeTimeOffPage");
+const MyTimeOffPage = page(() => import("@/pages/timeoff/MyTimeOffPage"), "MyTimeOffPage");
+const TeamCalendarPage = page(() => import("@/pages/timeoff/TeamCalendarPage"), "TeamCalendarPage");
 
 export default function App() {
   return (
-    <Routes>
-      {/* Public */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/accept-invite" element={<AcceptInvitePage />} />
+    <Suspense fallback={<FullPageSpinner />}>
+      <Routes>
+        {/* Public */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
-      {/* Everything inside the shell requires a session. */}
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppShell />}>
-          <Route index element={<DashboardPage />} />
+        {/* Everything inside the shell requires a session. */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppShell />}>
+            <Route index element={<DashboardPage />} />
 
-          {/* Reading people is for HR, admin and managers (scoped by the API);
-              writing is HR and admin only. */}
-          <Route element={<RoleRoute allow={["admin", "hr", "manager"]} />}>
-            <Route path="/employees" element={<EmployeesPage />} />
-            <Route path="/employees/:id" element={<EmployeeDetailPage />} />
-          </Route>
+            {/* Reading people is for HR, admin and managers (scoped by the
+                API); writing is HR and admin only. */}
+            <Route element={<RoleRoute allow={["admin", "hr", "manager"]} />}>
+              <Route path="/employees" element={<EmployeesPage />} />
+              <Route path="/employees/:id" element={<EmployeeDetailPage />} />
+              <Route path="/approvals" element={<ApprovalsPage />} />
+            </Route>
 
-          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
-            <Route path="/employees/new" element={<EmployeeFormPage />} />
-            <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
-            <Route path="/teams" element={<TeamsPage />} />
-            <Route path="/audit-log" element={<AuditLogPage />} />
-          </Route>
+            {/* HR and admin only: people admin, audit log, invoices (company
+                financial records) and payroll management. */}
+            <Route element={<RoleRoute allow={["admin", "hr"]} />}>
+              <Route path="/employees/new" element={<EmployeeFormPage />} />
+              <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
+              <Route path="/teams" element={<TeamsPage />} />
+              <Route path="/audit-log" element={<AuditLogPage />} />
 
-          {/* Invoices are company financial records: HR and admin only. */}
-          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
-            <Route path="/invoices" element={<InvoicesPage />} />
-            <Route path="/invoices/clients" element={<ClientsPage />} />
-            <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
-          </Route>
+              <Route path="/invoices" element={<InvoicesPage />} />
+              <Route path="/invoices/clients" element={<ClientsPage />} />
+              <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
 
-          {/* Payroll: HR/admin manage; everyone has their own payslips. */}
-          <Route path="/payroll/my" element={<MyPayslipsPage />} />
-          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
-            <Route path="/payroll" element={<PayrollDashboardPage />} />
-            <Route
-              path="/payroll/salary-structures"
-              element={<SalaryStructuresPage />}
-            />
-            <Route path="/payroll/monthly" element={<MonthlyPayrollPage />} />
-          </Route>
+              <Route path="/payroll" element={<PayrollDashboardPage />} />
+              <Route path="/payroll/salary-structures" element={<SalaryStructuresPage />} />
+              <Route path="/payroll/monthly" element={<MonthlyPayrollPage />} />
 
-          {/* Time off: everyone has their own page and calendar; approvals are
-              for managers, HR and admin. The API scopes what each one sees. */}
-          <Route path="/time-off" element={<MyTimeOffPage />} />
-          <Route path="/team-calendar" element={<TeamCalendarPage />} />
-          <Route element={<RoleRoute allow={["admin", "hr"]} />}>
-            <Route
-              path="/time-off/employees/:id"
-              element={<EmployeeTimeOffPage />}
-            />
-          </Route>
-          <Route element={<RoleRoute allow={["admin", "hr", "manager"]} />}>
-            <Route path="/approvals" element={<ApprovalsPage />} />
+              <Route path="/time-off/employees/:id" element={<EmployeeTimeOffPage />} />
+            </Route>
+
+            {/* Everyone has their own payslips, time off and calendar. */}
+            <Route path="/payroll/my" element={<MyPayslipsPage />} />
+            <Route path="/time-off" element={<MyTimeOffPage />} />
+            {/* HR/admin use /time-off as the Leaves directory; this is their
+                own personal view, reached from the "My time off" button. */}
+            <Route path="/time-off/me" element={<MyTimeOffPage personal />} />
+            <Route path="/team-calendar" element={<TeamCalendarPage />} />
           </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   );
 }

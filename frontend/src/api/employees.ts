@@ -2,7 +2,6 @@
 
 import {
   keepPreviousData,
-  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -10,7 +9,7 @@ import {
 import { apiGet, apiPatch, apiPost } from "@/api/client";
 import type { Role } from "@/api/queries";
 import type { Paginated } from "@/api/types";
-import { toQueryString } from "@/lib/query";
+import { toQueryString, useInvalidatingMutation } from "@/lib/query";
 
 export type EmploymentType = "full_time" | "part_time" | "contract" | "intern";
 export type EmployeeStatus = "active" | "inactive";
@@ -94,25 +93,21 @@ export function useEmployee(id: number | undefined) {
 export function useCreateEmployee() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (input: EmployeeInput) =>
+  return useInvalidatingMutation(
+    (input: EmployeeInput) =>
       apiPost<Employee>("/employees/", input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: employeeKeys.all });
-    },
-  });
+    () => queryClient.invalidateQueries({ queryKey: employeeKeys.all }),
+  );
 }
 
 export function useUpdateEmployee(id: number) {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (input: Partial<EmployeeInput>) =>
+  return useInvalidatingMutation(
+    (input: Partial<EmployeeInput>) =>
       apiPatch<Employee>(`/employees/${id}/`, input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: employeeKeys.all });
-    },
-  });
+    () => queryClient.invalidateQueries({ queryKey: employeeKeys.all }),
+  );
 }
 
 export type EmployeeStatusAction = "deactivate" | "reactivate";
@@ -120,16 +115,14 @@ export type EmployeeStatusAction = "deactivate" | "reactivate";
 export function useSetEmployeeStatus() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: ({
+  return useInvalidatingMutation(
+    ({
       id,
       action,
     }: {
       id: number;
       action: EmployeeStatusAction;
     }) => apiPost<Employee>(`/employees/${id}/${action}/`),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: employeeKeys.all });
-    },
-  });
+    () => queryClient.invalidateQueries({ queryKey: employeeKeys.all }),
+  );
 }

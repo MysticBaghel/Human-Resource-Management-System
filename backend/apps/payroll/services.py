@@ -91,14 +91,24 @@ def applicable_structure(
 
     Structure versions have increasing effective dates. The newest version on
     or before the period end is the one that was in force then.
+
+    Revoking a structure keeps it for history but stops it being used for
+    periods after the revocation date. Periods that ended before the revoke
+    still resolve to it, so payroll generated earlier (or for an earlier month)
+    is not invalidated.
     """
-    return (
+    structure = (
         SalaryStructure.objects.filter(
             employee=employee, effective_date__lte=for_period_end
         )
         .order_by("-effective_date", "-id")
         .first()
     )
+    if structure is None:
+        return None
+    if structure.revoked_at is not None and structure.revoked_at <= for_period_end:
+        return None
+    return structure
 
 
 def _validate_totals(values: dict) -> None:
@@ -217,6 +227,27 @@ def revise_salary_structure(
         reason=data.get("reason", ""),
     )
     return new_structure, revision
+
+
+@transaction.atomic
+def revoke_salary_structure(*, structure: SalaryStructure, actor) -> SalaryStructure:
+    """Retire the employee's active salary structure without deleting history.
+
+    The row stays in the database (and in revision history) but is no longer
+    active, so it disappears from the salary-structure page and cannot be used
+    by payroll periods after today. Creating a new structure for the employee
+    is then allowed.
+    """
+    locked = SalaryStructure.objects.select_for_update().get(pk=structure.pk)
+    if not locked.is_active:
+        raise ValidationError(
+            {"detail": ["Only the active salary structure can be revoked."]}
+        )
+
+    locked.is_active = False
+    locked.revoked_at = timezone.localdate()
+    locked.save(update_fields=["is_active", "revoked_at", "updated_at"])
+    return locked
 
 
 def _payroll_defaults(
@@ -441,6 +472,31 @@ def finalize_payroll_period(*, month: int, year: int, actor) -> list[PayrollReco
 
 
 @transaction.atomic
+def cancel_payroll(*, record: PayrollRecord, actor) -> PayrollRecord | None:
+    """Cancel a payroll record.
+
+    A draft is not financial data yet, so cancelling it deletes the row and
+    frees the period for regeneration. A finalized record is kept for audit and
+    its payment status becomes ``cancelled`` instead.
+    """
+    locked = PayrollRecord.objects.select_for_update().get(pk=record.pk)
+
+    if locked.status == PayrollRecord.Status.DRAFT:
+        locked.delete()
+        return None
+
+    if locked.payment_status == PayrollRecord.PaymentStatus.CANCELLED:
+        raise ValidationError({"detail": ["This payroll is already cancelled."]})
+
+    locked.payment_status = PayrollRecord.PaymentStatus.CANCELLED
+    locked.payment_date = None
+    locked.save(
+        update_fields=["payment_status", "payment_date", "updated_at"]
+    )
+    return locked
+
+
+@transaction.atomic
 def update_payment_status(
     *,
     record: PayrollRecord,
@@ -461,7 +517,10 @@ def update_payment_status(
         raise ValidationError(
             {"payment_date": ["A paid payroll needs a payment date."]}
         )
-    if payment_status == PayrollRecord.PaymentStatus.PENDING:
+    if payment_status in {
+        PayrollRecord.PaymentStatus.PENDING,
+        PayrollRecord.PaymentStatus.CANCELLED,
+    }:
         payment_date = None
 
     locked.payment_status = payment_status

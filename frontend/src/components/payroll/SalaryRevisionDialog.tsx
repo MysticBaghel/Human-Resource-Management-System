@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime, formatMoney } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
 
 type MoneySnapshotKey = Exclude<
   keyof SalarySnapshot,
@@ -74,7 +75,7 @@ export function SalaryRevisionDialog({
         ) : isError ? (
           <ErrorState
             title="Could not load revision history"
-            message={error instanceof Error ? error.message : undefined}
+            message={errorMessage(error)}
             onRetry={() => void refetch()}
           />
         ) : revisions.length === 0 ? (

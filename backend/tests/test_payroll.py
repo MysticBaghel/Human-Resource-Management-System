@@ -255,6 +255,59 @@ class TestSalaryStructureApi:
 
         assert response.status_code == 405
 
+    def test_active_structure_can_be_revoked(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        structure = make_salary_structure(demo_org.esha)
+        auth_client(demo_org.hr)
+
+        response = api_write("post", f"{STRUCTURES}{structure.pk}/revoke/")
+
+        assert response.status_code == 200
+        assert response.data["is_active"] is False
+        assert response.data["revoked_at"] == timezone.localdate().isoformat()
+        structure.refresh_from_db()
+        assert structure.is_active is False
+
+    def test_employee_cannot_revoke_a_structure(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        structure = make_salary_structure(demo_org.esha)
+        auth_client(demo_org.employee_user)
+
+        response = api_write("post", f"{STRUCTURES}{structure.pk}/revoke/")
+
+        assert response.status_code == 403
+
+    def test_only_the_active_structure_can_be_revoked(
+        self, auth_client, api_write, demo_org
+    ):
+        auth_client(demo_org.hr)
+        created = api_write("post", STRUCTURES, structure_payload(demo_org.esha))
+        old_id = created.data["id"]
+        api_write(
+            "patch",
+            f"{STRUCTURES}{old_id}/",
+            {"basic_salary": "60000.00", "effective_date": "2026-04-01"},
+        )
+
+        response = api_write("post", f"{STRUCTURES}{old_id}/revoke/")
+
+        assert response.status_code == 400
+        assert "active" in response.data["detail"].lower()
+
+    def test_revoked_structure_is_skipped_by_future_payroll(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        structure = make_salary_structure(demo_org.esha)
+        auth_client(demo_org.hr)
+        api_write("post", f"{STRUCTURES}{structure.pk}/revoke/")
+
+        response = generate(api_write, 1, 2099, demo_org.esha)
+
+        assert response.status_code == 400
+        assert "no salary structure" in response.data["detail"].lower()
+
 
 class TestSalaryRevision:
     def test_revision_creates_history_and_replaces_active_structure(
@@ -623,6 +676,71 @@ class TestFinalizationAndAdjustments:
         assert response.status_code == 200
         assert response.data["payment_status"] == "failed"
         assert response.data["payment_reference"] == "BANK-REJECT-1"
+
+    def test_cancelled_payment_status_is_recorded(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        make_salary_structure(demo_org.esha)
+        auth_client(demo_org.hr)
+        record = self._record(api_write, demo_org.esha)
+        api_write("post", f"{RECORDS}{record['id']}/finalize/")
+
+        response = api_write(
+            "post",
+            f"{RECORDS}{record['id']}/payment/",
+            {
+                "payment_status": "cancelled",
+                "payment_date": "2026-04-02",
+                "payment_reference": "CANCELLED-BY-HR",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.data["payment_status"] == "cancelled"
+        # Cancelled does not keep a payment date.
+        assert response.data["payment_date"] is None
+
+    def test_cancel_draft_deletes_it_and_allows_regeneration(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        make_salary_structure(demo_org.esha)
+        auth_client(demo_org.hr)
+        record = self._record(api_write, demo_org.esha)
+
+        response = api_write("post", f"{RECORDS}{record['id']}/cancel/")
+
+        assert response.status_code == 204
+        assert not PayrollRecord.objects.filter(pk=record["id"]).exists()
+
+        regenerated = generate(api_write, 3, 2026, demo_org.esha)
+        assert regenerated.status_code == 201
+
+    def test_cancel_finalized_payroll_keeps_record_for_audit(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        make_salary_structure(demo_org.esha)
+        auth_client(demo_org.hr)
+        record = self._record(api_write, demo_org.esha)
+        api_write("post", f"{RECORDS}{record['id']}/finalize/")
+
+        response = api_write("post", f"{RECORDS}{record['id']}/cancel/")
+
+        assert response.status_code == 200
+        assert response.data["status"] == "finalized"
+        assert response.data["payment_status"] == "cancelled"
+        assert PayrollRecord.objects.filter(pk=record["id"]).exists()
+
+    def test_employee_cannot_cancel_payroll(
+        self, auth_client, api_write, demo_org, make_salary_structure
+    ):
+        make_salary_structure(demo_org.esha)
+        auth_client(demo_org.hr)
+        record = self._record(api_write, demo_org.esha)
+        auth_client(demo_org.employee_user)
+
+        response = api_write("post", f"{RECORDS}{record['id']}/cancel/")
+
+        assert response.status_code == 403
 
     def test_employee_cannot_finalize_or_adjust(
         self, auth_client, api_write, demo_org, make_salary_structure

@@ -4,7 +4,7 @@
  * anywhere, including plain async helpers outside React.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -28,11 +28,21 @@ type ToastInput = {
 const DEFAULT_DURATION = 4000;
 
 let toasts: Toast[] = [];
-const listeners = new Set<(next: Toast[]) => void>();
+const listeners = new Set<() => void>();
 
 function emit() {
-  const snapshot = [...toasts];
-  listeners.forEach((listener) => listener(snapshot));
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot() {
+  return toasts;
 }
 
 export function toast({
@@ -53,17 +63,7 @@ export function dismissToast(id: string): void {
 }
 
 export function useToastState(): Toast[] {
-  const [snapshot, setSnapshot] = useState<Toast[]>(toasts);
-
-  useEffect(() => {
-    listeners.add(setSnapshot);
-    setSnapshot(toasts);
-    return () => {
-      listeners.delete(setSnapshot);
-    };
-  }, []);
-
-  return snapshot;
+  return useSyncExternalStore(subscribe, getSnapshot);
 }
 
 const VARIANT_CLASSES: Record<ToastVariant, string> = {

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
+import { errorMessage } from "@/lib/errors";
 
 const employeeSchema = z.object({
   email: z
@@ -380,7 +381,7 @@ export function EmployeeFormPage() {
         <BackLink to="/employees" label="Employees" />
         <ErrorState
           title={notFound ? "Employee not found" : "Could not load this employee"}
-          message={error instanceof Error ? error.message : undefined}
+          message={errorMessage(error)}
           onRetry={notFound ? undefined : () => void refetch()}
         />
       </div>

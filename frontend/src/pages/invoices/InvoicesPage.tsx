@@ -7,11 +7,10 @@ import {
   FileText,
   Plus,
   Search,
-  Send,
   Users,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
@@ -28,30 +27,22 @@ import { Pagination } from "@/components/common/Pagination";
 import { MetricCard } from "@/components/common/MetricCard";
 import { EmptyState, ErrorState } from "@/components/common/states";
 import { InvoiceFormDialog } from "@/components/invoices/InvoiceFormDialog";
-import { InvoiceRowStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
+import { InvoiceList } from "@/components/invoices/InvoiceList";
+import { ReminderQueueCard } from "@/components/invoices/ReminderQueueCard";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
+import { usePage } from "@/lib/usePage";
 
-const PAGE_SIZE = 20;
 const STATUS_OPTIONS: Array<InvoiceStatus | "overdue"> = [
   "draft",
   "sent",
@@ -94,9 +85,9 @@ export function InvoicesPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [client, setClient] = useState("");
-  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search);
+  const [page, setPage] = usePage(JSON.stringify([debouncedSearch, status, client]));
 
   const dashboard = useInvoiceDashboard();
   const queue = useReminderQueue(7);
@@ -109,10 +100,6 @@ export function InvoicesPage() {
     page_size: PAGE_SIZE,
   };
   const invoices = useInvoices(filters);
-
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, status, client]);
 
   const rows = invoices.data?.results ?? [];
   const allClients = clients.data?.results ?? [];
@@ -139,7 +126,7 @@ export function InvoicesPage() {
         <ErrorState
           title="Could not load the invoice dashboard"
           message={
-            dashboard.error instanceof Error ? dashboard.error.message : undefined
+            errorMessage(dashboard.error)
           }
           onRetry={() => void dashboard.refetch()}
         />
@@ -207,62 +194,10 @@ export function InvoicesPage() {
       </div>
 
       {queueRows.length > 0 ? (
-        <Card className="border-amber-200 bg-amber-50/40">
-          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-3">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Send className="h-4 w-4" aria-hidden="true" />
-                Payment reminders waiting
-              </CardTitle>
-              <CardDescription>
-                {queueRows.length} invoice{queueRows.length === 1 ? "" : "s"} due
-                soon or overdue, outside the reminder cooldown.
-              </CardDescription>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setStatus("overdue")}
-            >
-              Review overdue
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {queueRows.slice(0, 3).map((invoice) => (
-                <li
-                  key={invoice.id}
-                  className="rounded-lg border bg-background p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <Link
-                        to={`/invoices/${invoice.id}`}
-                        className="truncate text-sm font-medium underline-offset-4 hover:underline"
-                      >
-                        {invoice.invoice_number}
-                      </Link>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {invoice.client_name}
-                      </p>
-                    </div>
-                    <InvoiceRowStatusBadge invoice={invoice} />
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {formatMoney(invoice.balance_due)} due{" "}
-                    {formatDate(invoice.due_date)}
-                  </p>
-                  <Button asChild variant="ghost" size="sm" className="mt-2 px-0">
-                    <Link to={`/invoices/${invoice.id}?remind=1`}>
-                      Send reminder
-                    </Link>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        <ReminderQueueCard
+          queueRows={queueRows}
+          onReviewOverdue={() => setStatus("overdue")}
+        />
       ) : null}
 
       <Card>
@@ -316,9 +251,7 @@ export function InvoicesPage() {
             <ErrorState
               title="Could not load invoices"
               message={
-                invoices.error instanceof Error
-                  ? invoices.error.message
-                  : undefined
+                errorMessage(invoices.error)
               }
               onRetry={() => void invoices.refetch()}
             />
@@ -353,107 +286,7 @@ export function InvoicesPage() {
             />
           ) : (
             <>
-              <div className="hidden lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Issued / due</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right">Balance</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell>
-                          <Link
-                            to={`/invoices/${invoice.id}`}
-                            className="font-medium underline-offset-4 hover:underline"
-                          >
-                            {invoice.invoice_number}
-                          </Link>
-                          <p className="text-xs text-muted-foreground">
-                            {invoice.reference || "No reference"}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <p>{invoice.client_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {invoice.client_email || "No billing email"}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <p>{formatDate(invoice.issue_date)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            due {formatDate(invoice.due_date)}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(invoice.total_amount)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          {formatMoney(invoice.balance_due)}
-                        </TableCell>
-                        <TableCell>
-                          <InvoiceRowStatusBadge invoice={invoice} />
-                          {invoice.status === "partially_paid" ? (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {formatMoney(invoice.amount_paid)} paid
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild variant="outline" size="sm">
-                            <Link to={`/invoices/${invoice.id}`}>Open</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <ul className="space-y-3 lg:hidden">
-                {rows.map((invoice) => (
-                  <li key={invoice.id} className="space-y-3 rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <Link
-                          to={`/invoices/${invoice.id}`}
-                          className="text-sm font-medium underline-offset-4 hover:underline"
-                        >
-                          {invoice.invoice_number}
-                        </Link>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {invoice.client_name}
-                        </p>
-                      </div>
-                      <InvoiceRowStatusBadge invoice={invoice} />
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span>
-                        Issued {formatDate(invoice.issue_date)} · due{" "}
-                        {formatDate(invoice.due_date)}
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {formatMoney(invoice.balance_due)} due
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        Total {formatMoney(invoice.total_amount)}
-                      </span>
-                      <Button asChild variant="outline" size="sm">
-                        <Link to={`/invoices/${invoice.id}`}>Open invoice</Link>
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <InvoiceList rows={rows} />
 
               <Pagination
                 page={invoices.data?.page ?? page}

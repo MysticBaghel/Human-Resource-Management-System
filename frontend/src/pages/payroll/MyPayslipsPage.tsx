@@ -3,7 +3,6 @@
 import { Download, FileText, Lock } from "lucide-react";
 import { useState } from "react";
 
-import { ApiError } from "@/api/client";
 import {
   downloadPayslip,
   usePayrollRecords,
@@ -31,8 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
+import { errorMessage, showError } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
 
 function PageSkeleton() {
   return (
@@ -46,8 +46,6 @@ function PageSkeleton() {
     </div>
   );
 }
-
-const PAGE_SIZE = 20;
 
 export function MyPayslipsPage() {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -73,7 +71,7 @@ export function MyPayslipsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">My payslips</h1>
         <ErrorState
           title="Could not load your payroll information"
-          message={failure instanceof Error ? failure.message : undefined}
+          message={errorMessage(failure)}
           onRetry={() => {
             void structures.refetch();
             void records.refetch();
@@ -91,12 +89,7 @@ export function MyPayslipsPage() {
     try {
       await downloadPayslip(record);
     } catch (caught) {
-      toast({
-        title: "Could not download the payslip",
-        description:
-          caught instanceof ApiError ? caught.message : "Please try again.",
-        variant: "destructive",
-      });
+      showError("Could not download the payslip", caught);
     } finally {
       setDownloadingId(null);
     }

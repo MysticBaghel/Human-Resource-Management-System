@@ -14,7 +14,7 @@ import {
   useTeams,
   useUpdateTeam,
 } from "@/api/teams";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { Field } from "@/components/form/Field";
 import { FormError } from "@/components/form/FieldError";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -33,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/toast";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { errorMessage } from "@/lib/errors";
 
 const teamSchema = z.object({
   name: z.string().trim().min(1, "A team name is required."),
@@ -157,14 +157,7 @@ function TeamDialog({
 }
 
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <Skeleton key={index} className="h-14 w-full" />
-      ))}
-      <span className="sr-only">Loading teams…</span>
-    </div>
-  );
+  return <SkeletonRows count={4} height="h-14" label="Loading teams…" />;
 }
 
 export function TeamsPage() {
@@ -211,7 +204,7 @@ export function TeamsPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load teams"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : rows.length === 0 ? (

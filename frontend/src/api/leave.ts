@@ -2,14 +2,13 @@
 
 import {
   keepPreviousData,
-  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 
 import { apiGet, apiPost } from "@/api/client";
 import type { Paginated } from "@/api/types";
-import { toQueryString } from "@/lib/query";
+import { toQueryString, useInvalidatingMutation } from "@/lib/query";
 
 export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
 
@@ -105,8 +104,8 @@ export type LeaveRequestFilters = {
 export const leaveKeys = {
   all: ["leave"] as const,
   types: ["leave", "types"] as const,
-  balances: (year: number, employee?: number) =>
-    ["leave", "balances", year, employee ?? null] as const,
+  balances: (year: number, employee?: number, mine = false) =>
+    ["leave", "balances", year, employee ?? null, mine] as const,
   requests: (filters: LeaveRequestFilters) =>
     ["leave", "requests", filters] as const,
   preview: (input: LeaveRequestInput | null) =>
@@ -126,12 +125,21 @@ export function useLeaveTypes() {
   });
 }
 
-export function useLeaveBalances(year: number, employee?: number) {
+export function useLeaveBalances(
+  year: number,
+  employee?: number,
+  mine = false,
+) {
   return useQuery({
-    queryKey: leaveKeys.balances(year, employee),
+    queryKey: leaveKeys.balances(year, employee, mine),
     queryFn: () =>
       apiGet<Paginated<LeaveBalance>>(
-        `/leave-balances/${toQueryString({ year, employee, page_size: 100 })}`,
+        `/leave-balances/${toQueryString({
+          year,
+          employee,
+          mine: mine ? true : undefined,
+          page_size: 100,
+        })}`,
       ),
   });
 }
@@ -175,19 +183,17 @@ function useInvalidateLeave() {
 
 export function useCreateLeaveRequest() {
   const invalidate = useInvalidateLeave();
-  return useMutation({
-    mutationFn: (input: LeaveRequestInput) =>
+  return useInvalidatingMutation(
+    (input: LeaveRequestInput) =>
       apiPost<LeaveRequest>("/leave-requests/", input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useReviewLeaveRequest() {
   const invalidate = useInvalidateLeave();
-  return useMutation({
-    mutationFn: ({
+  return useInvalidatingMutation(
+    ({
       id,
       action,
       comment,
@@ -197,19 +203,15 @@ export function useReviewLeaveRequest() {
       comment: string;
     }) =>
       apiPost<LeaveRequest>(`/leave-requests/${id}/${action}/`, { comment }),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useCancelLeaveRequest() {
   const invalidate = useInvalidateLeave();
-  return useMutation({
-    mutationFn: (id: number) =>
+  return useInvalidatingMutation(
+    (id: number) =>
       apiPost<LeaveRequest>(`/leave-requests/${id}/cancel/`),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }

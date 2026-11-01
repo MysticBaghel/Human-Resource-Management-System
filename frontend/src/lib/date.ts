@@ -1,5 +1,26 @@
 /** Date helpers for date-only values (no timezone drift). */
 
+export const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+const DAY_MONTH_YEAR: Intl.DateTimeFormatOptions = {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+};
+
 export function toIsoDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -12,11 +33,7 @@ export function parseIsoDate(isoDate: string): Date {
 }
 
 export function formatLongDate(isoDate: string): string {
-  return parseIsoDate(isoDate).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return parseIsoDate(isoDate).toLocaleDateString(undefined, DAY_MONTH_YEAR);
 }
 
 export function formatDateRange(start: string, end: string): string {

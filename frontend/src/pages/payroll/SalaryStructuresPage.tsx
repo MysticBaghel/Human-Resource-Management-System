@@ -1,18 +1,17 @@
 /** HR/admin salary structures: current values, create, revise and history. */
 
 import { History, Pencil, Plus, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useEmployees } from "@/api/employees";
 import { useSalaryStructures, type SalaryStructure } from "@/api/payroll";
 import { Pagination } from "@/components/common/Pagination";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { SalaryRevisionDialog } from "@/components/payroll/SalaryRevisionDialog";
 import { SalaryStructureDialog } from "@/components/payroll/SalaryStructureDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -23,32 +22,23 @@ import {
 } from "@/components/ui/table";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { formatDate, formatMoney } from "@/lib/format";
-
-const PAGE_SIZE = 20;
+import { errorMessage } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
+import { usePage } from "@/lib/usePage";
 
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className="h-14 w-full" />
-      ))}
-      <span className="sr-only">Loading salary structures…</span>
-    </div>
-  );
+  return <SkeletonRows count={6} height="h-14" label="Loading salary structures…" />;
 }
 
 export function SalaryStructuresPage() {
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SalaryStructure | null>(null);
   const [historyFor, setHistoryFor] = useState<SalaryStructure | null>(null);
 
   const debouncedSearch = useDebouncedValue(search);
 
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch]);
+  const [page, setPage] = usePage(JSON.stringify([debouncedSearch]));
 
   const { data, isLoading, isError, error, refetch } = useSalaryStructures({
     active: true,
@@ -120,7 +110,7 @@ export function SalaryStructuresPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load salary structures"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : rows.length === 0 ? (

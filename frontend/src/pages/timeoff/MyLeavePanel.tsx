@@ -1,9 +1,9 @@
 /** My time off for employees and managers: own balances and own requests only. */
 
-import { CalendarPlus, Plus } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Plus } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
-import { ApiError } from "@/api/client";
 import {
   type LeaveRequest,
   useCancelLeaveRequest,
@@ -11,12 +11,13 @@ import {
   useLeaveRequests,
   useLeaveTypes,
 } from "@/api/leave";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { useAuth } from "@/auth/AuthContext";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { BalanceCards } from "@/components/leave/BalanceCards";
 import { LeaveStatusBadge } from "@/components/leave/LeaveStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -29,20 +30,15 @@ import {
 import { toast } from "@/components/ui/toast";
 import { formatDateRange } from "@/lib/date";
 import { formatDays } from "@/lib/format";
+import { showError } from "@/lib/errors";
 import { RequestLeaveDialog } from "./RequestLeaveDialog";
 
 function RequestsSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <Skeleton key={index} className="h-12 w-full" />
-      ))}
-      <span className="sr-only">Loading your leave requests…</span>
-    </div>
-  );
+  return <SkeletonRows count={4} height="h-12" label="Loading your leave requests…" />;
 }
 
 export function MyLeavePanel() {
+  const { hasRole } = useAuth();
   const year = new Date().getFullYear();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
@@ -59,7 +55,7 @@ export function MyLeavePanel() {
     isError: balancesError,
     error: balancesErrorValue,
     refetch: refetchBalances,
-  } = useLeaveBalances(year);
+  } = useLeaveBalances(year, undefined, true);
   const {
     data: requestsData,
     isLoading: requestsLoading,
@@ -86,12 +82,7 @@ export function MyLeavePanel() {
         setCancelTarget(null);
       },
       onError: (caught) => {
-        toast({
-          title: "Could not cancel",
-          description:
-            caught instanceof ApiError ? caught.message : "Please try again.",
-          variant: "destructive",
-        });
+        showError("Could not cancel", caught);
       },
     });
   }
@@ -105,14 +96,24 @@ export function MyLeavePanel() {
             Your balances and requests for {year}.
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={() => setDialogOpen(true)}
-          disabled={leaveTypes.length === 0}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Request leave
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {hasRole("admin", "hr") ? (
+            <Button asChild variant="outline">
+              <Link to="/time-off">
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Back to Leaves
+              </Link>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            disabled={leaveTypes.length === 0}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Request leave
+          </Button>
+        </div>
       </div>
 
       <section aria-labelledby="balances-heading" className="space-y-3">
@@ -130,7 +131,7 @@ export function MyLeavePanel() {
           <ErrorState
             title="Could not load your balances"
             message={
-              (balancesErrorValue as Error | null)?.message ??
+              balancesErrorValue?.message ??
               (typesError ? "Leave types could not be loaded." : undefined)
             }
             onRetry={() => {
@@ -161,7 +162,7 @@ export function MyLeavePanel() {
           ) : requestsError ? (
             <ErrorState
               title="Could not load your requests"
-              message={(requestsErrorValue as Error | null)?.message}
+              message={requestsErrorValue?.message}
               onRetry={() => void refetchRequests()}
             />
           ) : requests.length === 0 ? (
@@ -275,7 +276,7 @@ export function MyLeavePanel() {
         />
       ) : null}
 
-      <Dialog
+      <ConfirmDialog
         open={cancelTarget !== null}
         onOpenChange={(open) => {
           if (!open) setCancelTarget(null);
@@ -289,31 +290,15 @@ export function MyLeavePanel() {
               )}.`
             : undefined
         }
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCancelTarget(null)}
-            >
-              Keep it
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={confirmCancel}
-              disabled={cancelMutation.isPending}
-            >
-              {cancelMutation.isPending ? "Cancelling…" : "Cancel request"}
-            </Button>
-          </>
-        }
+        cancelLabel="Keep it"
+        confirmLabel="Cancel request"
+        pendingLabel="Cancelling…"
+        isPending={cancelMutation.isPending}
+        onConfirm={confirmCancel}
       >
-        <p className="text-sm text-muted-foreground">
-          If it was already approved, the days go back to your balance
-          immediately.
-        </p>
-      </Dialog>
+        If it was already approved, the days go back to your balance
+        immediately.
+      </ConfirmDialog>
     </div>
   );
 }

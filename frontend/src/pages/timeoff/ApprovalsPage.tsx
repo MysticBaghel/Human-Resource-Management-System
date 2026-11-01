@@ -3,7 +3,6 @@
 import { Check, X } from "lucide-react";
 import { useState } from "react";
 
-import { ApiError } from "@/api/client";
 import {
   type LeaveRequest,
   type LeaveRequestFilters,
@@ -11,11 +10,10 @@ import {
   useReviewLeaveRequest,
 } from "@/api/leave";
 import { useAuth } from "@/auth/AuthContext";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { LeaveStatusBadge } from "@/components/leave/LeaveStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -28,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { formatDateRange } from "@/lib/date";
 import { formatDays } from "@/lib/format";
+import { errorMessage, showError } from "@/lib/errors";
 
 function requestedOn(value: string): string {
   return new Date(value).toLocaleDateString(undefined, {
@@ -38,14 +37,7 @@ function requestedOn(value: string): string {
 }
 
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <Skeleton key={index} className="h-24 w-full" />
-      ))}
-      <span className="sr-only">Loading leave requests…</span>
-    </div>
-  );
+  return <SkeletonRows count={3} height="h-24" label="Loading leave requests…" />;
 }
 
 export function ApprovalsPage() {
@@ -97,12 +89,7 @@ export function ApprovalsPage() {
           });
         },
         onError: (caught) => {
-          toast({
-            title: "Could not save the decision",
-            description:
-              caught instanceof ApiError ? caught.message : "Please try again.",
-            variant: "destructive",
-          });
+          showError("Could not save the decision", caught);
         },
       },
     );
@@ -138,7 +125,7 @@ export function ApprovalsPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load leave requests"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : requests.length === 0 ? (

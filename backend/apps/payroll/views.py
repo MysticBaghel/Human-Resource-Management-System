@@ -128,6 +128,14 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
         )
         return Response(SalaryStructureSerializer(new_structure).data)
 
+    @action(detail=True, methods=["post"])
+    def revoke(self, request, pk=None):
+        """Retire the active structure while keeping it in revision history."""
+        structure = services.revoke_salary_structure(
+            structure=self.get_object(), actor=request.user
+        )
+        return Response(SalaryStructureSerializer(structure).data)
+
 
 class SalaryRevisionViewSet(viewsets.ReadOnlyModelViewSet):
     """Salary revision history, visible to HR and admin."""
@@ -271,6 +279,14 @@ class PayrollRecordViewSet(
     @action(detail=True, methods=["post"])
     def finalize(self, request, pk=None):
         record = services.finalize_payroll(record=self.get_object(), actor=request.user)
+        return Response(PayrollRecordSerializer(record).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Delete a draft payroll, or mark a finalized one cancelled."""
+        record = services.cancel_payroll(record=self.get_object(), actor=request.user)
+        if record is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(PayrollRecordSerializer(record).data)
 
     @action(detail=False, methods=["post"], url_path="finalize-period")

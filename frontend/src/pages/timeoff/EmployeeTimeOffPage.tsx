@@ -153,7 +153,7 @@ export function EmployeeTimeOffPage() {
         ) : balancesError ? (
           <ErrorState
             title="Could not load the balances"
-            message={(balancesErrorValue as Error | null)?.message}
+            message={balancesErrorValue?.message}
             onRetry={() => void refetchBalances()}
           />
         ) : balances.length === 0 ? (
@@ -184,7 +184,7 @@ export function EmployeeTimeOffPage() {
         ) : requestsError ? (
           <ErrorState
             title="Could not load the requests"
-            message={(requestsErrorValue as Error | null)?.message}
+            message={requestsErrorValue?.message}
             onRetry={() => void refetchRequests()}
           />
         ) : requests.length === 0 ? (

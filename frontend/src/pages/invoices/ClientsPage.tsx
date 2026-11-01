@@ -1,17 +1,17 @@
 /** HR/admin client directory for invoicing. */
 
 import { ArrowLeft, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { ApiError } from "@/api/client";
 import {
   useClients,
   useDeleteClient,
   type Client,
 } from "@/api/invoices";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Pagination } from "@/components/common/Pagination";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { ClientDialog } from "@/components/invoices/ClientDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -36,28 +34,22 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/toast";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-
-const PAGE_SIZE = 20;
+import { errorMessage, showError } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
+import { usePage } from "@/lib/usePage";
 
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <Skeleton key={index} className="h-16 w-full" />
-      ))}
-      <span className="sr-only">Loading clients…</span>
-    </div>
-  );
+  return <SkeletonRows count={5} height="h-16" label="Loading clients…" />;
 }
 
 export function ClientsPage() {
   const [search, setSearch] = useState("");
   const [active, setActive] = useState("");
-  const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Client | null>(null);
   const debouncedSearch = useDebouncedValue(search);
+  const [page, setPage] = usePage(JSON.stringify([debouncedSearch, active]));
   const deleteMutation = useDeleteClient();
 
   const { data, isLoading, isError, error, refetch } = useClients({
@@ -66,10 +58,6 @@ export function ClientsPage() {
     page,
     page_size: PAGE_SIZE,
   });
-
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, active]);
 
   const rows = data?.results ?? [];
   const hasFilters = Boolean(debouncedSearch || active);
@@ -85,11 +73,7 @@ export function ClientsPage() {
       });
       setRemoveTarget(null);
     } catch (caught) {
-      toast({
-        title: "Could not delete the client",
-        description: caught instanceof ApiError ? caught.message : "Please try again.",
-        variant: "destructive",
-      });
+      showError("Could not delete the client", caught);
     }
   }
 
@@ -165,7 +149,7 @@ export function ClientsPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load clients"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : rows.length === 0 ? (
@@ -343,39 +327,22 @@ export function ClientsPage() {
         client={editing}
       />
 
-      <Dialog
+      <ConfirmDialog
         open={removeTarget !== null}
         onOpenChange={(open) => {
           if (!open) setRemoveTarget(null);
         }}
         title="Delete this client?"
         description={removeTarget?.name}
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRemoveTarget(null)}
-              disabled={deleteMutation.isPending}
-            >
-              Keep client
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void handleDelete()}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? "Deleting…" : "Delete client"}
-            </Button>
-          </>
-        }
+        cancelLabel="Keep client"
+        confirmLabel="Delete client"
+        pendingLabel="Deleting…"
+        isPending={deleteMutation.isPending}
+        onConfirm={() => void handleDelete()}
       >
-        <p className="text-sm text-muted-foreground">
-          Only clients with no invoices can be deleted. For a client with
-          history, edit it and untick “Active client” instead.
-        </p>
-      </Dialog>
+        Only clients with no invoices can be deleted. For a client with
+        history, edit it and untick “Active client” instead.
+      </ConfirmDialog>
     </div>
   );
 }

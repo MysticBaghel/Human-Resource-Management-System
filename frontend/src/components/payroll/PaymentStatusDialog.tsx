@@ -18,7 +18,8 @@ import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { formatMoney } from "@/lib/format";
 
-const STATUSES: PaymentStatus[] = ["pending", "paid", "failed"];
+// Cancelled deliberately sits below Failed.
+const STATUSES: PaymentStatus[] = ["pending", "paid", "failed", "cancelled"];
 
 type PaymentStatusDialogProps = {
   open: boolean;
@@ -64,7 +65,10 @@ export function PaymentStatusDialog({
       toast({
         title: "Payment status updated",
         description: `${payroll.employee_name} · ${PAYMENT_STATUS_LABELS[status]}`,
-        variant: status === "failed" ? "destructive" : "success",
+        variant:
+          status === "failed" || status === "cancelled"
+            ? "destructive"
+            : "success",
       });
       onOpenChange(false);
     } catch (caught) {
@@ -102,7 +106,14 @@ export function PaymentStatusDialog({
           <Select
             id="payment-status"
             value={status}
-            onChange={(event) => setStatus(event.target.value as PaymentStatus)}
+            onChange={(event) => {
+              const next = event.target.value as PaymentStatus;
+              setStatus(next);
+              // Match the API: pending and cancelled do not keep a date.
+              if (next === "pending" || next === "cancelled") {
+                setPaymentDate("");
+              }
+            }}
           >
             {STATUSES.map((value) => (
               <option key={value} value={value}>
@@ -146,10 +157,17 @@ export function PaymentStatusDialog({
             Clear the payment date
           </Button>
         ) : null}
-        <p className="text-xs text-muted-foreground">
-          This records the outcome only; no bank transfer or payment gateway is
-          contacted.
-        </p>
+        {status === "cancelled" ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-muted-foreground">
+            The finalized payroll stays in the list for audit, its payment date
+            is cleared, and the payslip snapshot is unchanged.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            This records the outcome only; no bank transfer or payment gateway is
+            contacted.
+          </p>
+        )}
       </div>
     </Dialog>
   );

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiGet, apiPatch, apiPost } from "@/api/client";
 import type { Paginated } from "@/api/types";
-import { toQueryString } from "@/lib/query";
+import { toQueryString, useInvalidatingMutation } from "@/lib/query";
 
 export type Team = {
   id: number;
@@ -37,12 +37,10 @@ export function useTeams(search = "") {
 export function useCreateTeam() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (input: TeamInput) => apiPost<Team>("/teams/", input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: teamKeys.all });
-    },
-  });
+  return useInvalidatingMutation(
+    (input: TeamInput) => apiPost<Team>("/teams/", input),
+    () => queryClient.invalidateQueries({ queryKey: teamKeys.all }),
+  );
 }
 
 export function useUpdateTeam(id: number) {

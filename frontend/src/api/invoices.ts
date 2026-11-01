@@ -2,7 +2,6 @@
 
 import {
   keepPreviousData,
-  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -16,7 +15,7 @@ import {
   apiUpload,
 } from "@/api/client";
 import type { Paginated } from "@/api/types";
-import { toQueryString } from "@/lib/query";
+import { toQueryString, useInvalidatingMutation } from "@/lib/query";
 
 export type InvoiceStatus =
   | "draft"
@@ -33,17 +32,7 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export const INVOICE_STATUSES = Object.keys(
-  INVOICE_STATUS_LABELS,
-) as InvoiceStatus[];
-
 export type InvoiceReminderTrigger = "manual" | "due_soon" | "overdue";
-
-export const REMINDER_TRIGGER_LABELS: Record<InvoiceReminderTrigger, string> = {
-  manual: "Manual",
-  due_soon: "Due soon",
-  overdue: "Overdue",
-};
 
 export type Client = {
   id: number;
@@ -353,108 +342,90 @@ export function useClients(filters: ClientFilters = {}) {
 
 export function useCreateClient() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (input: ClientInput) => apiPost<Client>("/clients/", input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+  return useInvalidatingMutation(
+    (input: ClientInput) => apiPost<Client>("/clients/", input),
+    invalidate,
+  );
 }
 
 export function useUpdateClient(id: number) {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (input: Partial<ClientInput>) =>
+  return useInvalidatingMutation(
+    (input: Partial<ClientInput>) =>
       apiPatch<Client>(`/clients/${id}/`, input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useDeleteClient() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (id: number) => apiDelete<void>(`/clients/${id}/`),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+  return useInvalidatingMutation(
+    (id: number) => apiDelete<void>(`/clients/${id}/`),
+    invalidate,
+  );
 }
 
 export function useCreateInvoice() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (input: InvoiceInput) =>
+  return useInvalidatingMutation(
+    (input: InvoiceInput) =>
       apiPost<InvoiceDetail>("/invoices/", input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useUpdateInvoice(id: number) {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (input: InvoiceInput) =>
+  return useInvalidatingMutation(
+    (input: InvoiceInput) =>
       apiPatch<InvoiceDetail>(`/invoices/${id}/`, input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useSendInvoice() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: ({ id, ...input }: InvoiceSendInput & { id: number }) =>
+  return useInvalidatingMutation(
+    ({ id, ...input }: InvoiceSendInput & { id: number }) =>
       apiPost<InvoiceDetail>(`/invoices/${id}/send/`, input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useCancelInvoice() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (id: number) =>
+  return useInvalidatingMutation(
+    (id: number) =>
       apiPost<InvoiceDetail>(`/invoices/${id}/cancel/`),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useRecordInvoicePayment() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: ({ id, ...input }: PaymentInput & { id: number }) =>
+  return useInvalidatingMutation(
+    ({ id, ...input }: PaymentInput & { id: number }) =>
       apiPost<InvoiceDetail>(`/invoices/${id}/payment/`, input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useSendInvoiceReminder() {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: ({ id, ...input }: ReminderInput & { id: number }) =>
+  return useInvalidatingMutation(
+    ({ id, ...input }: ReminderInput & { id: number }) =>
       apiPost<{ reminder: InvoiceReminder; invoice: InvoiceDetail }>(
         `/invoices/${id}/reminder/`,
         input,
       ),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useUploadInvoiceAttachment(invoiceId: number) {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: ({
+  return useInvalidatingMutation(
+    ({
       file,
       kind,
       title,
@@ -472,21 +443,17 @@ export function useUploadInvoiceAttachment(invoiceId: number) {
         formData,
       );
     },
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useDeleteInvoiceAttachment(invoiceId: number) {
   const invalidate = useInvalidateInvoices();
-  return useMutation({
-    mutationFn: (attachmentId: number) =>
+  return useInvalidatingMutation(
+    (attachmentId: number) =>
       apiDelete<void>(`/invoices/${invoiceId}/attachments/${attachmentId}/`),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function downloadInvoicePdf(invoice: InvoiceListItem): Promise<void> {

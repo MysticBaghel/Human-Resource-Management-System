@@ -1,7 +1,7 @@
 /** Audit log: who changed what, newest first, HR and admin only. */
 
 import { Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   AUDIT_MODELS,
@@ -11,7 +11,7 @@ import {
   useAuditLogs,
 } from "@/api/audit";
 import { Pagination } from "@/components/common/Pagination";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { AuditActionBadge } from "@/components/audit/AuditActionBadge";
 import { AuditDetailDialog } from "@/components/audit/AuditDetailDialog";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -30,18 +29,12 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-
-const PAGE_SIZE = 20;
+import { errorMessage } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
+import { usePage } from "@/lib/usePage";
 
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className="h-14 w-full" />
-      ))}
-      <span className="sr-only">Loading audit events…</span>
-    </div>
-  );
+  return <SkeletonRows count={6} height="h-14" label="Loading audit events…" />;
 }
 
 export function AuditLogPage() {
@@ -51,15 +44,12 @@ export function AuditLogPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
 
   const debouncedSearch = useDebouncedValue(search);
   const { data: actors } = useAuditActors();
 
-  useEffect(() => {
-    setPage(1);
-  }, [action, model, actor, dateFrom, dateTo, debouncedSearch]);
+  const [page, setPage] = usePage(JSON.stringify([action, model, actor, dateFrom, dateTo, debouncedSearch]));
 
   const filters = {
     action: (action || undefined) as AuditAction | undefined,
@@ -181,7 +171,7 @@ export function AuditLogPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load the audit log"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : entries.length === 0 ? (

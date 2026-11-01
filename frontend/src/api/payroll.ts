@@ -2,17 +2,16 @@
 
 import {
   keepPreviousData,
-  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 
 import { apiDownload, apiGet, apiPatch, apiPost } from "@/api/client";
 import type { Paginated } from "@/api/types";
-import { toQueryString } from "@/lib/query";
+import { toQueryString, useInvalidatingMutation } from "@/lib/query";
 
 export type PayrollStatus = "draft" | "finalized";
-export type PaymentStatus = "pending" | "paid" | "failed";
+export type PaymentStatus = "pending" | "paid" | "failed" | "cancelled";
 
 export const PAYROLL_STATUS_LABELS: Record<PayrollStatus, string> = {
   draft: "Draft",
@@ -23,22 +22,10 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   pending: "Pending",
   paid: "Paid",
   failed: "Failed",
+  cancelled: "Cancelled",
 };
 
-export const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
+export { MONTH_NAMES } from "@/lib/date";
 
 /** Money fields shared by a salary structure and a payroll snapshot. */
 export type SalaryValues = {
@@ -68,6 +55,7 @@ export type SalaryStructure = SalaryValues & {
   date_of_joining: string;
   effective_date: string;
   is_active: boolean;
+  revoked_at: string | null;
   created_by: number | null;
   created_by_email: string | null;
   created_at: string;
@@ -199,12 +187,10 @@ export const payrollKeys = {
   dashboard: ["payroll", "dashboard"] as const,
   structures: (filters: SalaryStructureFilters) =>
     ["payroll", "structures", filters] as const,
-  structure: (id: number) => ["payroll", "structures", "detail", id] as const,
   revisions: (employee: number) =>
     ["payroll", "revisions", employee] as const,
   records: (filters: PayrollRecordFilters) =>
     ["payroll", "records", filters] as const,
-  record: (id: number) => ["payroll", "records", "detail", id] as const,
 };
 
 export const EARNING_FIELDS = [
@@ -261,14 +247,6 @@ export function useSalaryStructures(filters: SalaryStructureFilters = {}) {
   });
 }
 
-export function useSalaryStructure(id: number | undefined) {
-  return useQuery({
-    queryKey: payrollKeys.structure(id ?? 0),
-    queryFn: () => apiGet<SalaryStructure>(`/payroll/salary-structures/${id}/`),
-    enabled: id !== undefined,
-  });
-}
-
 export function useSalaryRevisions(employee: number | undefined) {
   return useQuery({
     queryKey: payrollKeys.revisions(employee ?? 0),
@@ -294,14 +272,6 @@ export function usePayrollRecords(filters: PayrollRecordFilters = {}) {
   });
 }
 
-export function usePayrollRecord(id: number | undefined) {
-  return useQuery({
-    queryKey: payrollKeys.record(id ?? 0),
-    queryFn: () => apiGet<PayrollRecord>(`/payroll/records/${id}/`),
-    enabled: id !== undefined,
-  });
-}
-
 function useInvalidatePayroll() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: payrollKeys.all });
@@ -309,41 +279,45 @@ function useInvalidatePayroll() {
 
 export function useCreateSalaryStructure() {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: (input: SalaryStructureInput) =>
+  return useInvalidatingMutation(
+    (input: SalaryStructureInput) =>
       apiPost<SalaryStructure>("/payroll/salary-structures/", input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useUpdateSalaryStructure(id: number) {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: (input: SalaryStructureInput) =>
+  return useInvalidatingMutation(
+    (input: SalaryStructureInput) =>
       apiPatch<SalaryStructure>(`/payroll/salary-structures/${id}/`, input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
+}
+
+/** Retire the active structure. Revision history and payroll snapshots stay. */
+export function useRevokeSalaryStructure() {
+  const invalidate = useInvalidatePayroll();
+  return useInvalidatingMutation(
+    (id: number) =>
+      apiPost<SalaryStructure>(`/payroll/salary-structures/${id}/revoke/`),
+    invalidate,
+  );
 }
 
 export function useGeneratePayroll() {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: (input: { month: number; year: number; employee?: number }) =>
+  return useInvalidatingMutation(
+    (input: { month: number; year: number; employee?: number }) =>
       apiPost<PayrollGenerationResult>("/payroll/records/generate/", input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useAdjustPayroll() {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: ({
+  return useInvalidatingMutation(
+    ({
       id,
       adjustment_amount,
       adjustment_note,
@@ -356,41 +330,49 @@ export function useAdjustPayroll() {
         adjustment_amount: adjustment_amount.toFixed(2),
         adjustment_note,
       }),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useFinalizePayroll() {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: (id: number) =>
+  return useInvalidatingMutation(
+    (id: number) =>
       apiPost<PayrollRecord>(`/payroll/records/${id}/finalize/`),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
+}
+
+/**
+ * Cancel a payroll record. A draft is deleted (204, no body) so it can be
+ * generated again; a finalized record comes back with payment_status
+ * "cancelled" and is kept for audit.
+ */
+export function useCancelPayroll() {
+  const invalidate = useInvalidatePayroll();
+  return useInvalidatingMutation(
+    (id: number) =>
+      apiPost<PayrollRecord | void>(`/payroll/records/${id}/cancel/`),
+    invalidate,
+  );
 }
 
 export function useFinalizePayrollPeriod() {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: (input: { month: number; year: number }) =>
+  return useInvalidatingMutation(
+    (input: { month: number; year: number }) =>
       apiPost<{ finalized_count: number; records: PayrollRecord[] }>(
         "/payroll/records/finalize-period/",
         input,
       ),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function useUpdatePayment() {
   const invalidate = useInvalidatePayroll();
-  return useMutation({
-    mutationFn: ({
+  return useInvalidatingMutation(
+    ({
       id,
       ...input
     }: {
@@ -399,10 +381,8 @@ export function useUpdatePayment() {
       payment_date: string | null;
       payment_reference: string;
     }) => apiPost<PayrollRecord>(`/payroll/records/${id}/payment/`, input),
-    onSuccess: () => {
-      void invalidate();
-    },
-  });
+    invalidate,
+  );
 }
 
 export function downloadPayslip(record: PayrollRecord): Promise<void> {

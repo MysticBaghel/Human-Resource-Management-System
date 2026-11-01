@@ -1,7 +1,7 @@
 /** Employees: searchable, filterable, paginated list for HR, admin and managers. */
 
 import { Search, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -13,14 +13,13 @@ import { ROLE_LABELS, type Role } from "@/api/queries";
 import { useTeams } from "@/api/teams";
 import { useAuth } from "@/auth/AuthContext";
 import { Pagination } from "@/components/common/Pagination";
-import { EmptyState, ErrorState } from "@/components/common/states";
+import { EmptyState, ErrorState, SkeletonRows } from "@/components/common/states";
 import { StatusBadge } from "@/components/employees/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -30,21 +29,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { errorMessage } from "@/lib/errors";
+import { PAGE_SIZE } from "@/lib/query";
+import { usePage } from "@/lib/usePage";
 
 const ROLE_OPTIONS: Role[] = ["admin", "hr", "manager", "employee"];
 const STATUS_OPTIONS: EmployeeStatus[] = ["active", "inactive"];
 
-const PAGE_SIZE = 20;
-
 function ListSkeleton() {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-live="polite">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className="h-14 w-full" />
-      ))}
-      <span className="sr-only">Loading employees…</span>
-    </div>
-  );
+  return <SkeletonRows count={6} height="h-14" label="Loading employees…" />;
 }
 
 export function EmployeesPage() {
@@ -55,14 +48,11 @@ export function EmployeesPage() {
   const [team, setTeam] = useState("");
   const [status, setStatus] = useState("");
   const [role, setRole] = useState("");
-  const [page, setPage] = useState(1);
 
   const debouncedSearch = useDebouncedValue(search);
   const { data: teams } = useTeams();
 
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, team, status, role]);
+  const [page, setPage] = usePage(JSON.stringify([debouncedSearch, team, status, role]));
 
   const filters = {
     search: debouncedSearch || undefined,
@@ -165,7 +155,7 @@ export function EmployeesPage() {
           ) : isError ? (
             <ErrorState
               title="Could not load employees"
-              message={error instanceof Error ? error.message : undefined}
+              message={errorMessage(error)}
               onRetry={() => void refetch()}
             />
           ) : rows.length === 0 ? (

@@ -13,9 +13,11 @@ import {
   EARNING_FIELDS,
   EARNING_LABELS,
   useCreateSalaryStructure,
+  useRevokeSalaryStructure,
   useUpdateSalaryStructure,
   type SalaryStructure,
 } from "@/api/payroll";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Field } from "@/components/form/Field";
 import { FormError } from "@/components/form/FieldError";
 import { SalaryBreakdown } from "@/components/payroll/SalaryBreakdown";
@@ -105,8 +107,10 @@ export function SalaryStructureDialog({
   const isEdit = structure !== undefined && structure !== null;
   const createMutation = useCreateSalaryStructure();
   const updateMutation = useUpdateSalaryStructure(structure?.id ?? 0);
+  const revokeMutation = useRevokeSalaryStructure();
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const [formError, setFormError] = useState<string | null>(null);
+  const [revokeOpen, setRevokeOpen] = useState(false);
 
   const {
     register,
@@ -123,6 +127,7 @@ export function SalaryStructureDialog({
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setRevokeOpen(false);
     reset(structure ? toFormValues(structure) : blankValues());
   }, [open, structure, reset]);
 
@@ -200,6 +205,28 @@ export function SalaryStructureDialog({
     }
   }
 
+  async function handleRevoke() {
+    if (!structure) return;
+    setFormError(null);
+    try {
+      await revokeMutation.mutateAsync(structure.id);
+      toast({
+        title: "Salary structure revoked",
+        description: `${structure.employee_name} will be skipped by future payroll runs until a new structure is created.`,
+        variant: "success",
+      });
+      setRevokeOpen(false);
+      onOpenChange(false);
+    } catch (caught) {
+      setRevokeOpen(false);
+      setFormError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not revoke the salary structure.",
+      );
+    }
+  }
+
   return (
     <Dialog
       open={open}
@@ -213,6 +240,16 @@ export function SalaryStructureDialog({
       className="sm:max-w-3xl"
       footer={
         <>
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setRevokeOpen(true)}
+              disabled={isSaving || revokeMutation.isPending}
+            >
+              Revoke
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -366,6 +403,26 @@ export function SalaryStructureDialog({
           <SalaryBreakdown values={preview} />
         </div>
       </form>
+
+      {isEdit && structure ? (
+        <ConfirmDialog
+          open={revokeOpen}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setRevokeOpen(false);
+          }}
+          title="Revoke this salary structure?"
+          description={`${structure.employee_name} · effective ${structure.effective_date}`}
+          cancelLabel="Keep structure"
+          confirmLabel="Revoke"
+          pendingLabel="Revoking…"
+          isPending={revokeMutation.isPending}
+          onConfirm={() => void handleRevoke()}
+        >
+          The structure stays in revision history and existing payroll snapshots
+          are untouched. Future payroll runs will skip this employee until a new
+          structure is created.
+        </ConfirmDialog>
+      ) : null}
     </Dialog>
   );
 }

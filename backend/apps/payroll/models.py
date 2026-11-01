@@ -88,6 +88,15 @@ class SalaryStructure(models.Model):
         default=True,
         help_text=_("The employee's current structure. History rows are inactive."),
     )
+    revoked_at = models.DateField(
+        _("revoked at"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Set when HR revokes the structure. The row is kept for history, "
+            "but payroll periods after this date cannot use it."
+        ),
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         verbose_name=_("created by"),
@@ -215,6 +224,7 @@ class PayrollRecord(models.Model):
         PENDING = "pending", _("Pending")
         PAID = "paid", _("Paid")
         FAILED = "failed", _("Failed")
+        CANCELLED = "cancelled", _("Cancelled")
 
     employee = models.ForeignKey(
         "employees.Employee",
