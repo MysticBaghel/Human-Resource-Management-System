@@ -26,7 +26,7 @@ export class ApiError extends Error {
 }
 
 function buildPath(path: string): string {
-  return `${API_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
+  return `${import.meta.env.VITE_API_BASE_URL || ""}${API_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function readCookie(name: string): string | null {

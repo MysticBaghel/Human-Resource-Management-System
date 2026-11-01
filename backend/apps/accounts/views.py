@@ -2,7 +2,7 @@
 
 Session auth plus CSRF is the chosen scheme, so React is served same-origin.
 """
-
+from django.middleware.csrf import get_token
 from django.conf import settings
 from django.contrib.auth import get_user_model, login as django_login, logout as django_logout
 from django.contrib.auth.tokens import default_token_generator
@@ -30,18 +30,17 @@ User = get_user_model()
 
 
 class CsrfView(APIView):
-    """Sets the CSRF cookie so the browser can send it back on login.
-
-    Django only sets the cookie on a rendered page; React is a separate origin
-    in dev, so the client calls this once before its first unsafe request.
-    """
+    """Provides a CSRF token to the frontend."""
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
 
     @method_decorator(ensure_csrf_cookie)
     def get(self, request) -> Response:
-        return Response({"detail": "CSRF cookie set."})
+        return Response({
+            "detail": "CSRF cookie set.",
+            "csrfToken": get_token(request),
+        })
 
 
 class LoginView(APIView):
