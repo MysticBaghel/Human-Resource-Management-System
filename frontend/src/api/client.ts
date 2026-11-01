@@ -1,10 +1,14 @@
+
 /** Typed HTTP client for the HRMS API.
- *
- * Session auth needs the CSRF cookie echoed back in a header on unsafe
- * requests, and cookies must be sent, so every call goes through here.
+ * Supports Django session authentication and CSRF across separate Render origins.
  */
 
 const API_PREFIX = "/api/v1";
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+let csrfToken: string | null = null;
+let csrfRequest: Promise<string> | null = null;
 
 export class ApiError extends Error {
   status: number;
@@ -26,12 +30,7 @@ export class ApiError extends Error {
 }
 
 function buildPath(path: string): string {
-  return `${import.meta.env.VITE_API_BASE_URL || ""}${API_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function readCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(^|;\\s*)${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[2]) : null;
+  return `${API_BASE_URL}${API_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 type ErrorPayload = {
@@ -40,10 +39,50 @@ type ErrorPayload = {
   fields?: Record<string, string[]>;
 };
 
-/** Read a JSON body (tolerating empty/invalid bodies); throw ApiError when not ok. */
-async function parseResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+type CsrfResponse = {
+  detail: string;
+  csrfToken: string;
+};
+
+async function getCsrfToken(forceRefresh = false): Promise<string> {
+  if (csrfToken && !forceRefresh) return csrfToken;
+  if (csrfRequest && !forceRefresh) return csrfRequest;
+
+  csrfRequest = (async () => {
+    const response = await fetch(buildPath("/auth/csrf/"), {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      throw new ApiError("Unable to obtain CSRF token.", response.status);
+    }
+
+    const data = (await response.json()) as CsrfResponse;
+
+    if (!data.csrfToken) {
+      throw new ApiError("Server did not return a CSRF token.", response.status);
+    }
+
+    csrfToken = data.csrfToken;
+    return csrfToken;
+  })();
+
+  try {
+    return await csrfRequest;
+  } finally {
+    csrfRequest = null;
+  }
+}
+
+async function parseResponse<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<T> {
   const text = await response.text();
   let payload: unknown = null;
+
   if (text) {
     try {
       payload = JSON.parse(text);
@@ -54,7 +93,12 @@ async function parseResponse<T>(response: Response, fallbackMessage: string): Pr
 
   if (!response.ok) {
     const data = (payload ?? {}) as ErrorPayload;
-    throw new ApiError(data.detail ?? fallbackMessage, response.status, data.code, data.fields);
+    throw new ApiError(
+      data.detail ?? fallbackMessage,
+      response.status,
+      data.code,
+      data.fields,
+    );
   }
 
   return payload as T;
@@ -65,18 +109,22 @@ type RequestOptions = {
   body?: unknown;
 };
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const { method = "GET", body } = options;
 
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
+
   if (method !== "GET") {
-    const csrfToken = readCookie("csrftoken");
-    if (csrfToken) {
-      headers["X-CSRFToken"] = csrfToken;
-    }
+    headers["X-CSRFToken"] = await getCsrfToken();
   }
 
   const response = await fetch(buildPath(path), {
@@ -90,7 +138,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     return undefined as T;
   }
 
-  return parseResponse<T>(response, `Request failed with status ${response.status}.`);
+  const result = await parseResponse<T>(
+    response,
+    `Request failed with status ${response.status}.`,
+  );
+
+  // Django rotates the CSRF secret after a successful login.
+  if (path.includes("/auth/login/") && response.ok) {
+    csrfToken = null;
+  }
+
+  return result;
 }
 
 export function apiGet<T>(path: string): Promise<T> {
@@ -109,38 +167,42 @@ export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
 }
 
-/** POST a FormData body (file uploads) with the session cookie and CSRF token. */
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  const csrfToken = readCookie("csrftoken");
-  if (csrfToken) {
-    headers["X-CSRFToken"] = csrfToken;
-  }
+/** Upload FormData with session and CSRF protection. */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+): Promise<T> {
+  const token = await getCsrfToken();
 
   const response = await fetch(buildPath(path), {
     method: "POST",
-    headers,
+    headers: {
+      Accept: "application/json",
+      "X-CSRFToken": token,
+    },
     credentials: "include",
     body: formData,
   });
 
-  return parseResponse<T>(response, `Upload failed with status ${response.status}.`);
+  return parseResponse<T>(
+    response,
+    `Upload failed with status ${response.status}.`,
+  );
 }
 
-/** Download a file (PDF payslips, invoice PDFs, uploaded files) with the session cookie. */
+/** Download a file using the current session. */
 export async function apiDownload(
   path: string,
   fallbackFilename: string,
 ): Promise<void> {
   const response = await fetch(buildPath(path), {
-    // Binary endpoints (PDFs, uploads) may return any content type; do not
-    // let DRF content negotiation reject the request before the file is sent.
     headers: { Accept: "*/*" },
     credentials: "include",
   });
 
   if (!response.ok) {
     await parseResponse(response, `Download failed with status ${response.status}.`);
+    return;
   }
 
   const blob = await response.blob();
@@ -158,7 +220,7 @@ export async function apiDownload(
   URL.revokeObjectURL(objectUrl);
 }
 
-/** Ask Django to set the CSRF cookie before the first unsafe request. */
-export function ensureCsrfCookie(): Promise<void> {
-  return request<{ detail: string }>("/auth/csrf/").then(() => undefined);
+/** Fetch and cache the CSRF token before the first unsafe request. */
+export async function ensureCsrfCookie(): Promise<void> {
+  await getCsrfToken();
 }
